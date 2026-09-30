@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasFeature } from "@/lib/features";
+import { hasFeature, parseFeatures, serializeFeatures } from "@/lib/features";
 import { parseLeadText } from "@/lib/lead-parser";
 import { resolveTenantId, type RouteRule } from "@/lib/lead-routing";
 import { isValidSlug, slugFromPath, tenantPath } from "@/lib/tenant-paths";
@@ -65,8 +65,9 @@ describe("Mandanten-Pfade", () => {
 
 describe("Feature-Schalter", () => {
   it("Entwicklungs-Mandant hat alles, andere nur Freigeschaltetes", () => {
-    expect(hasFeature({ isDevelopment: true, features: [] }, "leads-csv-export")).toBe(true);
-    expect(hasFeature({ isDevelopment: false, features: [] }, "leads-csv-export")).toBe(false);
-    expect(hasFeature({ isDevelopment: false, features: ["leads-csv-export"] }, "leads-csv-export")).toBe(true);
+    expect(hasFeature({ isDevelopment: true, features: "" }, "leads-csv-export")).toBe(true);
+    expect(hasFeature({ isDevelopment: false, features: "" }, "leads-csv-export")).toBe(false);
+    expect(hasFeature({ isDevelopment: false, features: "andere,leads-csv-export" }, "leads-csv-export")).toBe(true);
+    expect(serializeFeatures(parseFeatures(" a, b ,,a"))).toBe("a,b");
   });
 });

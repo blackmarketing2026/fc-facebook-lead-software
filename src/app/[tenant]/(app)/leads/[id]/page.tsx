@@ -148,7 +148,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
               {lead.answers.filter((a) => !isContactKey(a.questionKey)).map((a) => (
                 <div key={a.id} className="grid gap-1 py-2.5 sm:grid-cols-5 sm:gap-4">
                   <dt className="text-sm text-slate-500 sm:col-span-3">{a.questionLabel}</dt>
-                  <dd className="text-sm font-medium sm:col-span-2">{a.answers.join(", ") || "–"}</dd>
+                  <dd className="text-sm font-medium sm:col-span-2">{(a.answers as string[]).join(", ") || "–"}</dd>
                 </div>
               ))}
             </dl>

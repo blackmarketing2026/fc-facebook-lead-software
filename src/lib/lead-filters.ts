@@ -34,9 +34,10 @@ export function leadListWhere(user: CurrentUser, f: LeadListFilters): Prisma.Lea
     };
   }
   if (f.q) {
+    // Die MySQL-Sortierung (utf8mb4_unicode_ci) ignoriert Groß-/Kleinschreibung bereits.
     where.OR = [
-      { fullName: { contains: f.q, mode: "insensitive" } },
-      { email: { contains: f.q, mode: "insensitive" } },
+      { fullName: { contains: f.q } },
+      { email: { contains: f.q } },
       { phone: { contains: f.q.replace(/\s/g, "") } },
     ];
   }

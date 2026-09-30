@@ -15,6 +15,15 @@ export type FeatureKey = (typeof FEATURES)[number]["key"];
 
 export const FEATURE_KEYS: readonly string[] = FEATURES.map((f) => f.key);
 
-export function hasFeature(tenant: { isDevelopment: boolean; features: string[] }, key: FeatureKey): boolean {
-  return tenant.isDevelopment || tenant.features.includes(key);
+/** Die freigeschalteten Features stehen kommagetrennt in Tenant.features. */
+export function parseFeatures(value: string): string[] {
+  return value.split(",").map((f) => f.trim()).filter(Boolean);
+}
+
+export function serializeFeatures(keys: string[]): string {
+  return [...new Set(keys)].join(",");
+}
+
+export function hasFeature(tenant: { isDevelopment: boolean; features: string }, key: FeatureKey): boolean {
+  return tenant.isDevelopment || parseFeatures(tenant.features).includes(key);
 }

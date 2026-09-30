@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -58,7 +58,8 @@ model Tenant {
   status        TenantStatus @default(ACTIVE)
   /// Entwicklungs-Mandant: hat automatisch alle Feature-Schalter aktiv.
   isDevelopment Boolean      @default(false)
-  features      String[]     @default([])
+  /// Freigeschaltete Feature-Schlüssel, kommagetrennt (siehe src/lib/features.ts).
+  features      String       @default("") @db.VarChar(1000)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -75,7 +76,7 @@ model LeadRoute {
   tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   type      LeadRouteType
   /// RECIPIENT/SUBJECT: Text, der enthalten sein muss. JSON_FIELD: "feldname=wert".
-  pattern   String
+  pattern   String        @db.VarChar(255)
   priority  Int           @default(0)
   createdAt DateTime      @default(now())
 
@@ -138,13 +139,14 @@ model Lead {
 }
 
 model LeadAnswer {
-  id            String   @id @default(cuid())
+  id            String @id @default(cuid())
   leadId        String
-  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead          Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   position      Int
-  questionKey   String
-  questionLabel String
-  answers       String[]
+  questionKey   String @db.Text
+  questionLabel String @db.Text
+  /// Liste der Antworten (JSON-Array aus Strings)
+  answers       Json
 
   @@index([leadId])
 }
@@ -155,7 +157,7 @@ model Note {
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
-  text      String
+  text      String   @db.Text
   createdAt DateTime @default(now())
 
   @@index([leadId])
@@ -169,7 +171,7 @@ model Reminder {
   user       User      @relation(fields: [userId], references: [id])
   dueAt      DateTime
   title      String
-  comment    String?
+  comment    String?   @db.Text
   done       Boolean   @default(false)
   notifiedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -194,14 +196,14 @@ model InboundEmail {
   id         String        @id @default(cuid())
   tenantId   String?
   tenant     Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  messageId  String        @unique
-  from       String?
-  to         String?
-  subject    String?
+  messageId  String        @unique @db.VarChar(500)
+  from       String?       @db.Text
+  to         String?       @db.Text
+  subject    String?       @db.Text
   receivedAt DateTime      @default(now())
-  rawText    String
+  rawText    String        @db.LongText
   status     InboundStatus
-  error      String?
+  error      String?       @db.Text
   lead       Lead?
 
   @@index([tenantId, receivedAt])
@@ -211,12 +213,12 @@ model PushSubscription {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String   @unique
+  endpoint  String   @unique @db.VarChar(700)
   keys      Json
   createdAt DateTime @default(now())
 }
 
 model Setting {
   key   String @id
-  value String
+  value String @db.Text
 }

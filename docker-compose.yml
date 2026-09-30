@@ -1,14 +1,15 @@
 # Produktivbetrieb auf einem Server: docker compose up -d --build
 services:
   db:
-    image: postgres:17-alpine
+    image: mariadb:11
     restart: unless-stopped
     environment:
-      POSTGRES_USER: leadcenter
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-PLATZHALTER_db_passwort}
-      POSTGRES_DB: leadcenter
+      MARIADB_USER: leadcenter
+      MARIADB_PASSWORD: ${DB_PASSWORD:-PLATZHALTER_db_passwort}
+      MARIADB_DATABASE: leadcenter
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - dbdata:/var/lib/mysql
 
   app:
     build:
@@ -18,7 +19,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://leadcenter:${POSTGRES_PASSWORD:-PLATZHALTER_db_passwort}@db:5432/leadcenter
+      DATABASE_URL: mysql://leadcenter:${DB_PASSWORD:-PLATZHALTER_db_passwort}@db:3306/leadcenter
     ports:
       - "3000:3000"
     depends_on:
@@ -32,10 +33,10 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://leadcenter:${POSTGRES_PASSWORD:-PLATZHALTER_db_passwort}@db:5432/leadcenter
+      DATABASE_URL: mysql://leadcenter:${DB_PASSWORD:-PLATZHALTER_db_passwort}@db:3306/leadcenter
     command: ["npx", "tsx", "src/worker/index.ts"]
     depends_on:
       - app
 
 volumes:
-  pgdata:
+  dbdata:

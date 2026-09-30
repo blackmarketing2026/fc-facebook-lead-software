@@ -4,16 +4,14 @@ Empfängt Leads per E-Mail, verteilt sie automatisch per gewichtetem Round-Robin
 
 **Mandantenfähig:** Ein Deployment, eine Datenbank, eine Domain, beliebig viele Kunden-Dashboards unter eigenem Pfad (z. B. `/martin`). Function Concept verwaltet alle Dashboards zentral im Bereich **Plattform** (`/function-concept/platform`).
 
-**Stack:** Next.js 16 (App Router), PostgreSQL + Prisma 6, Tailwind 4, imapflow, web-push.
+**Stack:** Next.js 16 (App Router), MySQL/MariaDB + Prisma 6, Tailwind 4, imapflow, web-push.
 
 ## Lokal starten (Windows, ohne Docker)
 
 ```bash
 npm install
 cp .env.example .env         # SESSION_SECRET setzen (siehe Kommentar in der Datei)
-npm run db:local             # Terminal 1: eingebettetes PostgreSQL auf Port 5433
-npm run db:migrate           # einmalig: Tabellen anlegen
-npm run db:seed              # einmalig: Admin + Martin, Selina, Frances + Entwicklungs-Mandant
+npm run db:local             # Terminal 1: lokale MySQL auf Port 3307, spielt Migrationen + Testdaten automatisch ein
 npm run dev                  # Terminal 2: http://localhost:3000/function-concept, http://localhost:3000/dev (Entwicklung)
 npm run worker               # Terminal 3: Postfach-Abruf + Rückruf-Erinnerungen
 ```
@@ -39,7 +37,7 @@ Solange kein Postfach verbunden ist, lassen sich Leads unter **Postfach → Lead
 | `IMAP_HOST`, `IMAP_USER`, `IMAP_PASS`, … | Lead-Postfach. Ohne diese Werte läuft der Worker im Leerlauf. |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Browser-Push; erzeugen mit `npx web-push generate-vapid-keys`. Ohne diese Werte ist Push aus, Dashboard und Glocke funktionieren trotzdem. |
 | `APP_URL` | Öffentliche URL (für Links in .ics-Kalendereinträgen) |
-| `DATABASE_URL` | Produktions-Datenbank |
+| `DATABASE_URL` | Produktions-Datenbank, MySQL/MariaDB: `mysql://USER:PASSWORT@HOST:3306/DATENBANK` |
 | `CRON_SECRET` | Schützt die Cron-Routen für Postfach-Abruf und Erinnerungen |
 
 Browser-Push funktioniert nur über **HTTPS** (oder `localhost`).
@@ -72,11 +70,13 @@ Browser-Push funktioniert nur über **HTTPS** (oder `localhost`).
 ## Server-Betrieb (Docker)
 
 ```bash
-cp .env.example .env    # echte Werte eintragen, POSTGRES_PASSWORD setzen
+cp .env.example .env    # echte Werte eintragen, DB_PASSWORD setzen
 docker compose up -d --build
 docker compose exec app npx prisma db seed   # einmalig
 ```
 
-Startet drei Container: `db` (PostgreSQL), `app` (Port 3000, wendet Migrationen beim Start an) und `worker`. Davor gehört ein Reverse-Proxy mit HTTPS (z. B. Caddy oder nginx).
+Startet drei Container: `db` (MariaDB), `app` (Port 3000, wendet Migrationen beim Start an) und `worker`. Davor gehört ein Reverse-Proxy mit HTTPS (z. B. Caddy oder nginx).
 
-**Vercel:** Die Web-App läuft dort (Datenbank z. B. Neon oder Supabase). Der Dauer-Worker läuft auf Vercel nicht; stattdessen ruft ein Cron-Dienst jede Minute `GET /api/cron/mailbox` und `GET /api/cron/reminders` mit dem Header `Authorization: Bearer <CRON_SECRET>` auf. Das kann Vercel Cron (minütlich erst ab Vercel Pro) oder ein externer Dienst wie cron-job.org sein. Migrationen vor dem Deployment mit `npm run db:deploy` gegen die Produktions-Datenbank ausführen.
+**Datenbank bei All-Inkl (MySQL/MariaDB):** Im KAS eine **neue, leere** Datenbank anlegen und den **externen Zugriff** erlauben (Vercel hat keine festen IP-Adressen). `DATABASE_URL` in Vercel: `mysql://DBUSER:PASSWORT@HOST:3306/DBNAME?connection_limit=3` – Sonderzeichen im Passwort URL-kodieren. Die Migrationen legen beim Deployment alle Tabellen, die Mandanten Function Concept und Entwicklung sowie den Master-Account an.
+
+**Vercel:** Die Web-App läuft dort. Der Dauer-Worker läuft auf Vercel nicht; stattdessen ruft ein Cron-Dienst jede Minute `GET /api/cron/mailbox` und `GET /api/cron/reminders` mit dem Header `Authorization: Bearer <CRON_SECRET>` auf. Das kann Vercel Cron (minütlich erst ab Vercel Pro) oder ein externer Dienst wie cron-job.org sein. Migrationen vor dem Deployment mit `npm run db:deploy` gegen die Produktions-Datenbank ausführen.

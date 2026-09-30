@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteRoute, openTenant, setTenantStatus } from "@/app/actions/platform";
 import { db } from "@/lib/db";
-import { FEATURES } from "@/lib/features";
+import { FEATURES, parseFeatures } from "@/lib/features";
 import { formatDateTime } from "@/lib/format";
 import { ROUTE_TYPE_LABELS } from "@/lib/lead-routing";
 import { requirePlatformAdmin } from "@/lib/session";
@@ -105,7 +105,7 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
               <FeatureToggle
                 tenantId={tenant.id}
                 featureKey={f.key}
-                enabled={tenant.features.includes(f.key)}
+                enabled={parseFeatures(tenant.features).includes(f.key)}
                 forced={tenant.isDevelopment}
               />
               <div>

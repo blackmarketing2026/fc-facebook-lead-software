@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { FEATURE_KEYS } from "@/lib/features";
+import { FEATURE_KEYS, parseFeatures, serializeFeatures } from "@/lib/features";
 import { createSession, requirePlatformAdmin } from "@/lib/session";
 import { isValidSlug, PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 
@@ -104,7 +104,8 @@ export async function setFeature(tenantId: string, key: string, enabled: boolean
   await requirePlatformAdmin();
   if (!FEATURE_KEYS.includes(key)) throw new Error("Unbekanntes Feature");
   const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { features: true } });
-  const features = enabled ? [...new Set([...tenant.features, key])] : tenant.features.filter((f) => f !== key);
+  const current = parseFeatures(tenant.features);
+  const features = serializeFeatures(enabled ? [...current, key] : current.filter((f) => f !== key));
   await db.tenant.update({ where: { id: tenantId }, data: { features } });
   refresh(tenantId);
 }

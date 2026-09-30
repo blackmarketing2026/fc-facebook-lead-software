@@ -53,10 +53,10 @@ export function previewSequence(candidates: DistCandidate[], n: number): string[
  */
 export async function assignNextSalesUser(tx: Prisma.TransactionClient, tenantId: string): Promise<string | null> {
   const rows = await tx.$queryRaw<DistCandidate[]>`
-    SELECT id, "distOrder", "distWeight", "distCurrent"
-    FROM "User"
-    WHERE "tenantId" = ${tenantId} AND role = 'SALES' AND active = true AND "distPaused" = false
-    ORDER BY "distOrder" ASC
+    SELECT id, distOrder, distWeight, distCurrent
+    FROM User
+    WHERE tenantId = ${tenantId} AND role = 'SALES' AND active = true AND distPaused = false
+    ORDER BY distOrder ASC
     FOR UPDATE`;
   const { winnerId, updated } = pickNext(rows);
   for (const c of updated) {

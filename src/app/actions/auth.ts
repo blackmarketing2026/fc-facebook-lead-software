@@ -21,7 +21,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
   // Anmeldung mit Benutzername oder E-Mail-Adresse
   const user = login.includes("@")
-    ? await db.user.findFirst({ where: { tenantId: tenant.id, email: { equals: login, mode: "insensitive" }, active: true } })
+    ? await db.user.findFirst({ where: { tenantId: tenant.id, email: login, active: true } })
     : await db.user.findUnique({ where: { tenantId_username: { tenantId: tenant.id, username: login } } });
   const valid = user && user.active && (await bcrypt.compare(password, user.passwordHash));
   if (!valid) return { error: "Benutzername oder Passwort ist falsch." };
