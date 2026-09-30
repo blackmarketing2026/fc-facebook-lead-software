@@ -1,0 +1,41 @@
+# Produktivbetrieb auf einem Server: docker compose up -d --build
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: leadcenter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-PLATZHALTER_db_passwort}
+      POSTGRES_DB: leadcenter
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-PLATZHALTER}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://leadcenter:${POSTGRES_PASSWORD:-PLATZHALTER_db_passwort}@db:5432/leadcenter
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+  worker:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-PLATZHALTER}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://leadcenter:${POSTGRES_PASSWORD:-PLATZHALTER_db_passwort}@db:5432/leadcenter
+    command: ["npx", "tsx", "src/worker/index.ts"]
+    depends_on:
+      - app
+
+volumes:
+  pgdata:

@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  @apply bg-slate-50 text-slate-900;
+}
+
+@utility label {
+    @apply mb-1 block text-sm font-medium text-slate-700;
+}
+
+@utility input {
+    @apply block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200;
+}
+
+@utility btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+@utility btn-primary {
+    @apply btn bg-blue-600 text-white hover:bg-blue-700;
+}
+
+@utility btn-secondary {
+    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+}
+
+@utility btn-danger {
+    @apply btn border border-red-200 bg-white text-red-700 hover:bg-red-50;
+}
+
+@utility card {
+    @apply rounded-xl bg-white shadow-sm ring-1 ring-slate-200;
+}
+
+@utility badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+}
+

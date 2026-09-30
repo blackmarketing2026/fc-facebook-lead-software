@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SALES
+}
+
+enum LeadStatus {
+  NEU
+  KONTAKTIERT
+  NICHT_ERREICHT
+  TERMIN
+  ABGESCHLOSSEN
+  VERLOREN
+}
+
+enum ActivityType {
+  CREATED
+  ASSIGNED
+  STATUS_CHANGED
+  CALL_CLICKED
+  WHATSAPP_CLICKED
+  EMAIL_CLICKED
+  NOTE_ADDED
+  REMINDER_SET
+  REMINDER_DONE
+}
+
+enum InboundStatus {
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String
+  passwordHash String
+  displayName  String
+  role         Role     @default(SALES)
+  active       Boolean  @default(true)
+  // Verteilung (gewichtetes Round-Robin)
+  distOrder    Int      @default(0)
+  distWeight   Int      @default(1)
+  distPaused   Boolean  @default(false)
+  distCurrent  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  leads             Lead[]
+  notes             Note[]
+  reminders         Reminder[]
+  activities        Activity[]
+  pushSubscriptions PushSubscription[]
+}
+
+model Lead {
+  id            String        @id @default(cuid())
+  receivedAt    DateTime      @default(now())
+  fullName      String?
+  email         String?
+  phone         String?
+  language      String?
+  status        LeadStatus    @default(NEU)
+  rawJson       Json
+  assignedToId  String?
+  assignedTo    User?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  sourceEmailId String?       @unique
+  sourceEmail   InboundEmail? @relation(fields: [sourceEmailId], references: [id], onDelete: SetNull)
+  updatedAt     DateTime      @updatedAt
+
+  answers    LeadAnswer[]
+  notes      Note[]
+  reminders  Reminder[]
+  activities Activity[]
+
+  @@index([receivedAt])
+  @@index([assignedToId, receivedAt])
+}
+
+model LeadAnswer {
+  id            String   @id @default(cuid())
+  leadId        String
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  position      Int
+  questionKey   String
+  questionLabel String
+  answers       String[]
+
+  @@index([leadId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+}
+
+model Reminder {
+  id         String    @id @default(cuid())
+  leadId     String
+  lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  dueAt      DateTime
+  title      String
+  comment    String?
+  done       Boolean   @default(false)
+  notifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, done, dueAt])
+}
+
+model Activity {
+  id        String       @id @default(cuid())
+  leadId    String
+  lead      Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      ActivityType
+  meta      Json?
+  createdAt DateTime     @default(now())
+
+  @@index([leadId])
+}
+
+model InboundEmail {
+  id         String        @id @default(cuid())
+  messageId  String        @unique
+  from       String?
+  subject    String?
+  receivedAt DateTime      @default(now())
+  rawText    String
+  status     InboundStatus
+  error      String?
+  lead       Lead?
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  keys      Json
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}
