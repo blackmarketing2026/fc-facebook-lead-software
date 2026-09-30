@@ -1,5 +1,5 @@
 import { checkReminders } from "./reminders";
-import { imapConfigured, pollMailbox } from "./imap";
+import { imapConfigured, pollMailbox } from "../lib/mailbox";
 
 const IMAP_INTERVAL = Number(process.env.IMAP_POLL_SECONDS || 60) * 1000;
 const REMINDER_INTERVAL = 60 * 1000;

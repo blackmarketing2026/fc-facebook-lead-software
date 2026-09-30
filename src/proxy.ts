@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login"];
+// /auth/handoff: Einmal-Link aus dem Plattform-Bereich, /suspended: Hinweis für gesperrte Dashboards.
+const PUBLIC_PATHS = ["/login", "/auth/handoff", "/suspended"];
 
 // Grobe Vorprüfung: ohne Session-Cookie geht es zur Login-Seite.
 // Die echte Prüfung (Signatur, Rolle, aktiver Benutzer) passiert serverseitig in jeder Seite/Action.

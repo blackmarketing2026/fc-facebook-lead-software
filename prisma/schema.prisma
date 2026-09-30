@@ -39,31 +39,106 @@ enum InboundStatus {
   IGNORED
 }
 
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum LeadRouteType {
+  RECIPIENT
+  SUBJECT
+  JSON_FIELD
+}
+
+/// Ein Kunden-Dashboard (Mandant). Alle Benutzer und Leads gehören genau einem Mandanten.
+model Tenant {
+  id            String       @id @default(cuid())
+  slug          String       @unique
+  name          String
+  status        TenantStatus @default(ACTIVE)
+  /// Entwicklungs-Mandant: hat automatisch alle Feature-Schalter aktiv.
+  isDevelopment Boolean      @default(false)
+  features      String[]     @default([])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  domains       TenantDomain[]
+  users         User[]
+  leads         Lead[]
+  inboundEmails InboundEmail[]
+  leadRoutes    LeadRoute[]
+}
+
+model TenantDomain {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Klein geschrieben, inkl. Port bei lokalen Domains (z. B. "dev.localhost:3000").
+  hostname      String    @unique
+  verified      Boolean   @default(false)
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([tenantId])
+}
+
+/// Regel, nach der eine Lead-Mail aus dem zentralen Postfach einem Mandanten zugeordnet wird.
+model LeadRoute {
+  id        String        @id @default(cuid())
+  tenantId  String
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type      LeadRouteType
+  /// RECIPIENT/SUBJECT: Text, der enthalten sein muss. JSON_FIELD: "feldname=wert".
+  pattern   String
+  priority  Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  @@index([tenantId])
+}
+
+/// Einmal-Token für den Plattform-Login in einen Mandanten ohne Passwort.
+model HandoffToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tenantId  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  email        String
-  passwordHash String
-  displayName  String
-  role         Role     @default(SALES)
-  active       Boolean  @default(true)
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  username        String
+  email           String
+  passwordHash    String
+  displayName     String
+  role            Role     @default(SALES)
+  active          Boolean  @default(true)
+  /// Darf den Plattform-Bereich nutzen und sich in alle Mandanten einloggen.
+  isPlatformAdmin Boolean  @default(false)
   // Verteilung (gewichtetes Round-Robin)
-  distOrder    Int      @default(0)
-  distWeight   Int      @default(1)
-  distPaused   Boolean  @default(false)
-  distCurrent  Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  distOrder       Int      @default(0)
+  distWeight      Int      @default(1)
+  distPaused      Boolean  @default(false)
+  distCurrent     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   leads             Lead[]
   notes             Note[]
   reminders         Reminder[]
   activities        Activity[]
   pushSubscriptions PushSubscription[]
+
+  @@unique([tenantId, username])
 }
 
 model Lead {
   id            String        @id @default(cuid())
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   receivedAt    DateTime      @default(now())
   fullName      String?
   email         String?
@@ -82,7 +157,7 @@ model Lead {
   reminders  Reminder[]
   activities Activity[]
 
-  @@index([receivedAt])
+  @@index([tenantId, receivedAt])
   @@index([assignedToId, receivedAt])
 }
 
@@ -141,14 +216,19 @@ model Activity {
 
 model InboundEmail {
   id         String        @id @default(cuid())
+  tenantId   String?
+  tenant     Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   messageId  String        @unique
   from       String?
+  to         String?
   subject    String?
   receivedAt DateTime      @default(now())
   rawText    String
   status     InboundStatus
   error      String?
   lead       Lead?
+
+  @@index([tenantId, receivedAt])
 }
 
 model PushSubscription {

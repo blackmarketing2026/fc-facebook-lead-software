@@ -1,23 +1,28 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
+import { PLATFORM_TENANT_SLUG } from "@/lib/hosts";
+import { ROUTE_TYPE_LABELS } from "@/lib/lead-routing";
 import { requireAdmin } from "@/lib/session";
 import { ManualImportForm, ReprocessButton } from "./mailbox-controls";
 
-export const metadata = { title: "Postfach · Function Concept - Facebook Lead Software" };
+export const metadata = { title: "Postfach" };
 
 type LastRun = { at: string; ok: boolean; processed?: number; ignored?: number; message?: string };
 
 export default async function MailboxPage() {
-  await requireAdmin();
-  const [lastRunSetting, mails, counts] = await Promise.all([
+  const admin = await requireAdmin();
+  const tenantId = admin.tenantId;
+  const [lastRunSetting, mails, counts, routes] = await Promise.all([
     db.setting.findUnique({ where: { key: "imap.lastRun" } }),
     db.inboundEmail.findMany({
+      where: { tenantId },
       orderBy: { receivedAt: "desc" },
       take: 50,
       include: { lead: { select: { id: true, fullName: true } } },
     }),
-    db.inboundEmail.groupBy({ by: ["status"], _count: true }),
+    db.inboundEmail.groupBy({ by: ["status"], where: { tenantId }, _count: true }),
+    db.leadRoute.findMany({ where: { tenantId }, orderBy: { priority: "desc" } }),
   ]);
   const lastRun: LastRun | null = lastRunSetting ? JSON.parse(lastRunSetting.value) : null;
   const count = (s: string) => counts.find((c) => c.status === s)?._count ?? 0;
@@ -28,7 +33,25 @@ export default async function MailboxPage() {
       <div>
         <h1 className="text-2xl font-semibold">Postfach</h1>
         <p className="text-sm text-slate-500">
-          Der Worker ruft das Lead-Postfach regelmäßig ab. Jede Mail mit einem gültigen Lead-JSON wird als Lead angelegt.
+          Das zentrale Lead-Postfach wird regelmäßig abgerufen. Jede Mail mit einem gültigen Lead-JSON wird als Lead
+          angelegt und über die Zuordnungsregeln dem richtigen Dashboard zugewiesen.
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          {routes.length > 0 ? (
+            <>
+              Leads landen in diesem Dashboard bei:{" "}
+              {routes.map((r, i) => (
+                <span key={r.id}>
+                  {i > 0 && " · "}
+                  {ROUTE_TYPE_LABELS[r.type]} <code className="rounded bg-slate-100 px-1">{r.pattern}</code>
+                </span>
+              ))}
+            </>
+          ) : admin.tenant.slug === PLATFORM_TENANT_SLUG ? (
+            "Dieses Dashboard bekommt alle Leads, für die keine andere Zuordnungsregel passt."
+          ) : (
+            "Noch keine Zuordnungsregel hinterlegt – Function Concept richtet sie im Plattform-Bereich ein."
+          )}
         </p>
       </div>
 

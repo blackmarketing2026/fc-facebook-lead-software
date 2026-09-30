@@ -2,12 +2,12 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { DistributionEditor } from "./distribution-editor";
 
-export const metadata = { title: "Verteilung · Function Concept - Facebook Lead Software" };
+export const metadata = { title: "Verteilung" };
 
 export default async function DistributionPage() {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const users = await db.user.findMany({
-    where: { role: "SALES" },
+    where: { tenantId: admin.tenantId, role: "SALES" },
     orderBy: { distOrder: "asc" },
     select: { id: true, displayName: true, active: true, distWeight: true, distPaused: true, distOrder: true, distCurrent: true },
   });

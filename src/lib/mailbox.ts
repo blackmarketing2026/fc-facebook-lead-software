@@ -1,7 +1,7 @@
 import { ImapFlow } from "imapflow";
-import { simpleParser } from "mailparser";
-import { db } from "../lib/db";
-import { processInboundMail } from "../lib/lead-service";
+import { simpleParser, type AddressObject, type ParsedMail } from "mailparser";
+import { db } from "./db";
+import { processInboundMail } from "./lead-service";
 
 const SEEN_FLAG = String.raw`\Seen`;
 const PROCESSED_FOLDER = process.env.IMAP_PROCESSED_FOLDER || "Verarbeitet";
@@ -9,6 +9,24 @@ const PROCESSED_FOLDER = process.env.IMAP_PROCESSED_FOLDER || "Verarbeitet";
 export function imapConfigured(): boolean {
   const { IMAP_HOST, IMAP_USER, IMAP_PASS } = process.env;
   return Boolean(IMAP_HOST && IMAP_USER && IMAP_PASS && !IMAP_HOST.startsWith("PLATZHALTER"));
+}
+
+function addressText(value: AddressObject | AddressObject[] | undefined): string[] {
+  if (!value) return [];
+  return (Array.isArray(value) ? value : [value]).map((a) => a.text);
+}
+
+/**
+ * Alle Empfänger einer Mail. Leitet ein Alias (z. B. martin@…) ins zentrale Postfach weiter,
+ * steht die ursprüngliche Adresse meist in To, Delivered-To oder X-Original-To.
+ */
+function recipients(mail: ParsedMail): string {
+  const headerValues = ["delivered-to", "x-original-to", "envelope-to"].flatMap((h) => {
+    const v = mail.headers.get(h);
+    if (!v) return [];
+    return (Array.isArray(v) ? v : [v]).map((x) => (typeof x === "string" ? x : (x as AddressObject).text ?? String(x)));
+  });
+  return [...addressText(mail.to), ...addressText(mail.cc), ...headerValues].join(", ");
 }
 
 async function setStatus(value: string) {
@@ -55,6 +73,7 @@ export async function pollMailbox(): Promise<void> {
           const result = await processInboundMail({
             messageId: mail.messageId || `uid-${uid}-${mail.date?.getTime() ?? Date.now()}`,
             from: mail.from?.text,
+            to: recipients(mail),
             subject: mail.subject,
             receivedAt: mail.date ?? new Date(),
             text: mail.text ?? "",

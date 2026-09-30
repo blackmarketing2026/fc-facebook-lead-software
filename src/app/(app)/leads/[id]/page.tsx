@@ -16,7 +16,7 @@ import {
   StatusSelect,
 } from "./lead-controls";
 
-export const metadata = { title: "Lead · Function Concept - Facebook Lead Software" };
+export const metadata = { title: "Lead" };
 
 /** Morgen 10:00 Uhr (Berlin) als Vorschlag für den Rückruf, im Format von datetime-local. */
 function defaultDueValue(): string {
@@ -56,7 +56,7 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
       },
     }),
     db.user.findMany({
-      where: { role: "SALES", active: true },
+      where: { tenantId: user.tenantId, role: "SALES", active: true },
       orderBy: { distOrder: "asc" },
       select: { id: true, displayName: true },
     }),

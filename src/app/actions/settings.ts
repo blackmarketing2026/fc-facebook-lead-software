@@ -28,17 +28,18 @@ function firstError(err: z.ZodError) {
 }
 
 export async function createUser(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const parsed = userSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: firstError(parsed.error) };
   const pw = passwordSchema.safeParse(formData.get("password"));
   if (!pw.success) return { error: firstError(pw.error) };
 
-  const maxOrder = await db.user.aggregate({ _max: { distOrder: true } });
+  const maxOrder = await db.user.aggregate({ where: { tenantId: admin.tenantId }, _max: { distOrder: true } });
   try {
     await db.user.create({
       data: {
         ...parsed.data,
+        tenantId: admin.tenantId,
         passwordHash: await bcrypt.hash(pw.data, 12),
         distOrder: (maxOrder._max.distOrder ?? 0) + 1,
       },
@@ -49,7 +50,7 @@ export async function createUser(_prev: SettingsState, formData: FormData): Prom
     }
     throw err;
   }
-  await resetCounters();
+  await resetCounters(admin.tenantId);
   revalidatePath("/settings", "layout");
   return { ok: "Mitglied angelegt." };
 }
@@ -72,6 +73,9 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
     passwordHash = await bcrypt.hash(pw.data, 12);
   }
 
+  const target = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId }, select: { id: true } });
+  if (!target) return { error: "Mitglied nicht gefunden." };
+
   try {
     await db.user.update({ where: { id: userId }, data: { ...parsed.data, active, ...(passwordHash ? { passwordHash } : {}) } });
   } catch (err) {
@@ -80,14 +84,14 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
     }
     throw err;
   }
-  await resetCounters();
+  await resetCounters(admin.tenantId);
   revalidatePath("/settings", "layout");
   return { ok: password ? "Gespeichert, Passwort geändert." : "Gespeichert." };
 }
 
 /** Zähler zurücksetzen, damit neue Einstellungen sofort sauber greifen. */
-async function resetCounters() {
-  await db.user.updateMany({ data: { distCurrent: 0 } });
+async function resetCounters(tenantId: string) {
+  await db.user.updateMany({ where: { tenantId }, data: { distCurrent: 0 } });
 }
 
 const distributionSchema = z.array(
@@ -100,14 +104,14 @@ const distributionSchema = z.array(
 
 /** Speichert Reihenfolge (Position im Array), Gewicht und Pause der Vertriebler. */
 export async function saveDistribution(entries: unknown): Promise<SettingsState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const parsed = distributionSchema.safeParse(entries);
   if (!parsed.success) return { error: "Ungültige Einstellungen" };
 
   await db.$transaction(
     parsed.data.map((e, index) =>
-      db.user.update({
-        where: { id: e.id },
+      db.user.updateMany({
+        where: { id: e.id, tenantId: admin.tenantId },
         data: { distOrder: index, distWeight: e.weight, distPaused: e.paused, distCurrent: 0 },
       }),
     ),
@@ -117,7 +121,9 @@ export async function saveDistribution(entries: unknown): Promise<SettingsState>
 }
 
 export async function reprocessInboundAction(inboundId: string): Promise<SettingsState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const inbound = await db.inboundEmail.findFirst({ where: { id: inboundId, tenantId: admin.tenantId }, select: { id: true } });
+  if (!inbound) return { error: "Mail nicht gefunden." };
   const result = await reprocessInbound(inboundId);
   revalidatePath("/settings/mailbox");
   return result.status === "PROCESSED" ? { ok: "Lead angelegt." } : { error: "error" in result ? result.error : "Fehler" };
@@ -133,7 +139,7 @@ export async function manualImport(_prev: SettingsState, formData: FormData): Pr
     subject: "Manueller Import",
     receivedAt: new Date(),
     text,
-  });
+  }, admin.tenantId);
   revalidatePath("/settings/mailbox");
   revalidatePath("/leads");
   if (result.status === "PROCESSED") {

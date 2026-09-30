@@ -2,11 +2,12 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { CreateUserForm, EditUserForm } from "./user-forms";
 
-export const metadata = { title: "Mitglieder · Function Concept - Facebook Lead Software" };
+export const metadata = { title: "Mitglieder" };
 
 export default async function UsersPage() {
   const admin = await requireAdmin();
   const users = await db.user.findMany({
+    where: { tenantId: admin.tenantId },
     orderBy: [{ role: "asc" }, { distOrder: "asc" }],
     select: { id: true, username: true, email: true, displayName: true, role: true, active: true },
   });
@@ -16,7 +17,7 @@ export default async function UsersPage() {
       <div>
         <h1 className="text-2xl font-semibold">Mitglieder</h1>
         <p className="text-sm text-slate-500">
-          Vertriebler und Admins mit Zugang zur Function Concept - Facebook Lead Software. Vertriebler sehen nur ihre eigenen Leads.
+          Vertriebler und Admins mit Zugang zu diesem Dashboard. Vertriebler sehen nur ihre eigenen Leads.
         </p>
       </div>
 

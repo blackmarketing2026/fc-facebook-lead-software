@@ -10,13 +10,13 @@ export async function GET() {
   const soon = new Date(now.getTime() + 15 * 60 * 1000);
   const [reminders, newLeads] = await Promise.all([
     db.reminder.findMany({
-      where: { userId: user.id, done: false, dueAt: { lte: soon } },
+      where: { userId: user.id, done: false, dueAt: { lte: soon }, lead: { tenantId: user.tenantId } },
       orderBy: { dueAt: "asc" },
       include: { lead: { select: { id: true, fullName: true } } },
       take: 20,
     }),
     db.lead.findMany({
-      where: { assignedToId: user.id, status: "NEU" },
+      where: { tenantId: user.tenantId, assignedToId: user.id, status: "NEU" },
       orderBy: { receivedAt: "desc" },
       select: { id: true, fullName: true, receivedAt: true },
       take: 20,

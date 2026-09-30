@@ -1,46 +1,23 @@
-import type { LeadStatus, Prisma } from "@prisma/client";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
-import { leadScope } from "@/lib/access";
 import { db } from "@/lib/db";
-import { formatDateTime, parseBerlinLocal } from "@/lib/format";
+import { hasFeature } from "@/lib/features";
+import { formatDateTime } from "@/lib/format";
 import { STATUS_LABELS, STATUSES } from "@/lib/labels";
+import { leadListFilters, leadListWhere } from "@/lib/lead-filters";
 import { requireUser } from "@/lib/session";
 
-export const metadata = { title: "Leads · Function Concept - Facebook Lead Software" };
+export const metadata = { title: "Leads" };
 
 const PAGE_SIZE = 50;
-
-function str(v: string | string[] | undefined) {
-  return typeof v === "string" ? v : "";
-}
 
 export default async function LeadsPage(props: PageProps<"/leads">) {
   const user = await requireUser();
   const sp = await props.searchParams;
-  const q = str(sp.q).trim();
-  const status = str(sp.status) as LeadStatus | "";
-  const assignee = str(sp.assignee);
-  const from = str(sp.from);
-  const to = str(sp.to);
-  const page = Math.max(1, Number(str(sp.page)) || 1);
-
-  const where: Prisma.LeadWhereInput = { ...leadScope(user) };
-  if (status && STATUSES.includes(status)) where.status = status;
-  if (user.role === "ADMIN" && assignee) where.assignedToId = assignee === "none" ? null : assignee;
-  if (from || to) {
-    where.receivedAt = {
-      ...(from ? { gte: parseBerlinLocal(`${from}T00:00`) } : {}),
-      ...(to ? { lt: new Date(parseBerlinLocal(`${to}T00:00`).getTime() + 24 * 60 * 60 * 1000) } : {}),
-    };
-  }
-  if (q) {
-    where.OR = [
-      { fullName: { contains: q, mode: "insensitive" } },
-      { email: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q.replace(/\s/g, "") } },
-    ];
-  }
+  const filters = leadListFilters(sp);
+  const { q, status, assignee, from, to } = filters;
+  const page = Math.max(1, Number(typeof sp.page === "string" ? sp.page : 1) || 1);
+  const where = leadListWhere(user, filters);
 
   const [leads, total, salesUsers] = await Promise.all([
     db.lead.findMany({
@@ -52,18 +29,23 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
     }),
     db.lead.count({ where }),
     user.role === "ADMIN"
-      ? db.user.findMany({ where: { role: "SALES" }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true } })
+      ? db.user.findMany({ where: { tenantId: user.tenantId, role: "SALES" }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true } })
       : Promise.resolve([]),
   ]);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const pageHref = (p: number) => {
+  const filterParams = () => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries({ q, status, assignee, from, to })) if (v) params.set(k, v);
+    return params;
+  };
+  const pageHref = (p: number) => {
+    const params = filterParams();
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
     return s ? `/leads?${s}` : "/leads";
   };
+  const canExport = user.role === "ADMIN" && hasFeature(user.tenant, "leads-csv-export");
 
   return (
     <div className="space-y-4">
@@ -100,6 +82,11 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
           <Link href="/leads" className="btn-secondary">
             Zurücksetzen
           </Link>
+          {canExport && (
+            <a href={`/api/leads/export?${filterParams()}`} className="btn-secondary ml-auto">
+              CSV exportieren
+            </a>
+          )}
         </div>
       </form>
 

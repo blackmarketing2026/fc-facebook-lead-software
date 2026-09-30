@@ -1,12 +1,16 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { assignNextSalesUser } from "./distribution";
-import { parseLeadText } from "./lead-parser";
+import { PLATFORM_TENANT_SLUG } from "./hosts";
+import { parseLeadText, type ParsedAnswer } from "./lead-parser";
+import { resolveTenantId } from "./lead-routing";
 import { sendPushToUser } from "./push";
 
 export type InboundMail = {
   messageId: string;
   from?: string | null;
+  /** Alle Empfänger-Adressen (To, Cc, Delivered-To …) für die Mandanten-Zuordnung. */
+  to?: string | null;
   subject?: string | null;
   receivedAt?: Date;
   text: string;
@@ -19,45 +23,49 @@ export type ProcessResult =
   | { status: "PROCESSED"; leadId: string; assignedToId: string | null; inboundId: string };
 
 /**
- * Verarbeitet eine eingehende Mail: speichert sie, parst den Lead, legt ihn an,
- * verteilt ihn per Round-Robin und benachrichtigt den Vertriebler.
+ * Mandant für eine Mail aus dem zentralen Postfach: erste passende Zuordnungsregel,
+ * sonst der Plattform-Mandant (Function Concept).
  */
-export async function processInboundMail(mail: InboundMail): Promise<ProcessResult> {
+async function tenantForMail(mail: Pick<InboundMail, "to" | "subject">, answers: ParsedAnswer[]): Promise<string> {
+  const rules = await db.leadRoute.findMany({ select: { tenantId: true, type: true, pattern: true, priority: true } });
+  const matched = resolveTenantId(rules, mail, answers);
+  if (matched) return matched;
+  const platform = await db.tenant.findUniqueOrThrow({ where: { slug: PLATFORM_TENANT_SLUG }, select: { id: true } });
+  return platform.id;
+}
+
+/**
+ * Verarbeitet eine eingehende Mail: speichert sie, ordnet sie einem Mandanten zu, parst den Lead,
+ * legt ihn an, verteilt ihn per Round-Robin und benachrichtigt den Vertriebler.
+ * forceTenantId: für den manuellen Import aus einem bestimmten Dashboard.
+ */
+export async function processInboundMail(mail: InboundMail, forceTenantId?: string): Promise<ProcessResult> {
   const existing = await db.inboundEmail.findUnique({ where: { messageId: mail.messageId } });
   if (existing) return { status: "DUPLICATE" };
 
   const rawText = mail.text || mail.html || "";
   const parsed = parseLeadText(mail.text, mail.html);
+  const tenantId = forceTenantId ?? (await tenantForMail(mail, parsed.ok ? parsed.lead.answers : []));
+  const inboundData = {
+    tenantId,
+    messageId: mail.messageId,
+    from: mail.from,
+    to: mail.to,
+    subject: mail.subject,
+    receivedAt: mail.receivedAt,
+    rawText,
+  };
 
   if (!parsed.ok) {
     // Jede Mail wird geprüft; Mails ohne Lead-JSON werden nur protokolliert.
-    const inbound = await db.inboundEmail.create({
-      data: {
-        messageId: mail.messageId,
-        from: mail.from,
-        subject: mail.subject,
-        receivedAt: mail.receivedAt,
-        rawText,
-        status: "IGNORED",
-        error: parsed.error,
-      },
-    });
+    const inbound = await db.inboundEmail.create({ data: { ...inboundData, status: "IGNORED", error: parsed.error } });
     return { status: "IGNORED", error: parsed.error, inboundId: inbound.id };
   }
 
   try {
     const { lead, assignedToId, inboundId } = await db.$transaction(async (tx) => {
-      const inbound = await tx.inboundEmail.create({
-        data: {
-          messageId: mail.messageId,
-          from: mail.from,
-          subject: mail.subject,
-          receivedAt: mail.receivedAt,
-          rawText,
-          status: "PROCESSED",
-        },
-      });
-      const created = await createLead(tx, parsed.lead, inbound.id, mail.receivedAt);
+      const inbound = await tx.inboundEmail.create({ data: { ...inboundData, status: "PROCESSED" } });
+      const created = await createLead(tx, tenantId, parsed.lead, inbound.id, mail.receivedAt);
       return { ...created, inboundId: inbound.id };
     });
     await notifyNewLead(lead.id, lead.fullName, assignedToId);
@@ -67,17 +75,7 @@ export async function processInboundMail(mail: InboundMail): Promise<ProcessResu
       return { status: "DUPLICATE" };
     }
     const error = (err as Error).message;
-    const inbound = await db.inboundEmail.create({
-      data: {
-        messageId: mail.messageId,
-        from: mail.from,
-        subject: mail.subject,
-        receivedAt: mail.receivedAt,
-        rawText,
-        status: "FAILED",
-        error,
-      },
-    });
+    const inbound = await db.inboundEmail.create({ data: { ...inboundData, status: "FAILED", error } });
     return { status: "FAILED", error, inboundId: inbound.id };
   }
 }
@@ -92,9 +90,10 @@ export async function reprocessInbound(inboundId: string): Promise<ProcessResult
     await db.inboundEmail.update({ where: { id: inboundId }, data: { error: parsed.error } });
     return { status: inbound.status === "FAILED" ? "FAILED" : "IGNORED", error: parsed.error, inboundId };
   }
+  const tenantId = inbound.tenantId ?? (await tenantForMail(inbound, parsed.lead.answers));
   const { lead, assignedToId } = await db.$transaction(async (tx) => {
-    await tx.inboundEmail.update({ where: { id: inboundId }, data: { status: "PROCESSED", error: null } });
-    return createLead(tx, parsed.lead, inboundId, inbound.receivedAt);
+    await tx.inboundEmail.update({ where: { id: inboundId }, data: { status: "PROCESSED", error: null, tenantId } });
+    return createLead(tx, tenantId, parsed.lead, inboundId, inbound.receivedAt);
   });
   await notifyNewLead(lead.id, lead.fullName, assignedToId);
   return { status: "PROCESSED", leadId: lead.id, assignedToId, inboundId };
@@ -102,13 +101,15 @@ export async function reprocessInbound(inboundId: string): Promise<ProcessResult
 
 async function createLead(
   tx: Prisma.TransactionClient,
+  tenantId: string,
   parsed: Extract<ReturnType<typeof parseLeadText>, { ok: true }>["lead"],
   sourceEmailId: string | null,
   receivedAt?: Date,
 ) {
-  const assignedToId = await assignNextSalesUser(tx);
+  const assignedToId = await assignNextSalesUser(tx, tenantId);
   const lead = await tx.lead.create({
     data: {
+      tenantId,
       receivedAt: receivedAt ?? new Date(),
       fullName: parsed.fullName,
       email: parsed.email,

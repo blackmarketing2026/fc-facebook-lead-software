@@ -14,7 +14,8 @@ export async function GET(request: Request, ctx: RouteContext<"/api/reminders/[i
   });
   if (!reminder) return new Response("Nicht gefunden", { status: 404 });
 
-  const baseUrl = process.env.APP_URL || new URL(request.url).origin;
+  // Link auf die Domain, über die der Kalendereintrag geladen wurde (jeder Mandant hat seine eigene).
+  const baseUrl = new URL(request.url).origin;
   const leadUrl = `${baseUrl}/leads/${reminder.lead.id}`;
   const description = [
     reminder.title,

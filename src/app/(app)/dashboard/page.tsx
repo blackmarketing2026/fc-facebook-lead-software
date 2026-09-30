@@ -6,7 +6,7 @@ import { STATUS_LABELS, STATUSES } from "@/lib/labels";
 import { requireUser } from "@/lib/session";
 import { ReminderActions } from "../leads/[id]/lead-controls";
 
-export const metadata = { title: "Dashboard · Function Concept - Facebook Lead Software" };
+export const metadata = { title: "Dashboard" };
 
 function startOfBerlinDay(offsetDays = 0): Date {
   const day = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(new Date());
@@ -21,13 +21,13 @@ export default async function DashboardPage() {
 
   const [reminders, newLeads] = await Promise.all([
     db.reminder.findMany({
-      where: { userId: user.id, done: false },
+      where: { userId: user.id, done: false, lead: { tenantId: user.tenantId } },
       orderBy: { dueAt: "asc" },
       take: 30,
       include: { lead: { select: { id: true, fullName: true, phone: true, status: true } } },
     }),
     db.lead.findMany({
-      where: { assignedToId: user.id, status: "NEU" },
+      where: { tenantId: user.tenantId, assignedToId: user.id, status: "NEU" },
       orderBy: { receivedAt: "asc" },
       take: 20,
       select: { id: true, fullName: true, phone: true, receivedAt: true },
@@ -106,20 +106,21 @@ export default async function DashboardPage() {
         </section>
       </div>
 
-      {user.role === "ADMIN" && <AdminStats todayStart={todayStart} />}
+      {user.role === "ADMIN" && <AdminStats tenantId={user.tenantId} todayStart={todayStart} />}
     </div>
   );
 }
 
-async function AdminStats({ todayStart }: { todayStart: Date }) {
+async function AdminStats({ tenantId, todayStart }: { tenantId: string; todayStart: Date }) {
   const weekStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
   const [salesUsers, today, week, byStatus, unassigned, latest] = await Promise.all([
-    db.user.findMany({ where: { role: "SALES" }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true, active: true, distPaused: true } }),
-    db.lead.groupBy({ by: ["assignedToId"], where: { receivedAt: { gte: todayStart } }, _count: true }),
-    db.lead.groupBy({ by: ["assignedToId"], where: { receivedAt: { gte: weekStart } }, _count: true }),
-    db.lead.groupBy({ by: ["status"], _count: true }),
-    db.lead.count({ where: { assignedToId: null } }),
+    db.user.findMany({ where: { tenantId, role: "SALES" }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true, active: true, distPaused: true } }),
+    db.lead.groupBy({ by: ["assignedToId"], where: { tenantId, receivedAt: { gte: todayStart } }, _count: true }),
+    db.lead.groupBy({ by: ["assignedToId"], where: { tenantId, receivedAt: { gte: weekStart } }, _count: true }),
+    db.lead.groupBy({ by: ["status"], where: { tenantId }, _count: true }),
+    db.lead.count({ where: { tenantId, assignedToId: null } }),
     db.lead.findMany({
+      where: { tenantId },
       orderBy: { receivedAt: "desc" },
       take: 8,
       include: { assignedTo: { select: { displayName: true } } },

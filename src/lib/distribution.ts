@@ -48,14 +48,14 @@ export function previewSequence(candidates: DistCandidate[], n: number): string[
 }
 
 /**
- * Wählt in einer laufenden Transaktion den nächsten Vertriebler und speichert die Zähler.
+ * Wählt in einer laufenden Transaktion den nächsten Vertriebler des Mandanten und speichert die Zähler.
  * Die Zeilen werden mit FOR UPDATE gesperrt, damit parallele Leads sich nicht überschneiden.
  */
-export async function assignNextSalesUser(tx: Prisma.TransactionClient): Promise<string | null> {
+export async function assignNextSalesUser(tx: Prisma.TransactionClient, tenantId: string): Promise<string | null> {
   const rows = await tx.$queryRaw<DistCandidate[]>`
     SELECT id, "distOrder", "distWeight", "distCurrent"
     FROM "User"
-    WHERE role = 'SALES' AND active = true AND "distPaused" = false
+    WHERE "tenantId" = ${tenantId} AND role = 'SALES' AND active = true AND "distPaused" = false
     ORDER BY "distOrder" ASC
     FOR UPDATE`;
   const { winnerId, updated } = pickNext(rows);

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { displayName, getTenant } from "@/lib/tenant";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,10 +13,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Function Concept - Facebook Lead Software",
-  description: "Leads empfangen, verteilen und bearbeiten",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const name = displayName(await getTenant());
+  return {
+    title: { template: `%s · ${name}`, default: name },
+    description: "Leads empfangen, verteilen und bearbeiten",
+  };
+}
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
