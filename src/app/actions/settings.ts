@@ -51,7 +51,7 @@ export async function createUser(_prev: SettingsState, formData: FormData): Prom
     throw err;
   }
   await resetCounters(admin.tenantId);
-  revalidatePath("/settings", "layout");
+  revalidatePath("/[tenant]/settings", "layout");
   return { ok: "Mitglied angelegt." };
 }
 
@@ -85,7 +85,7 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
     throw err;
   }
   await resetCounters(admin.tenantId);
-  revalidatePath("/settings", "layout");
+  revalidatePath("/[tenant]/settings", "layout");
   return { ok: password ? "Gespeichert, Passwort geändert." : "Gespeichert." };
 }
 
@@ -116,7 +116,7 @@ export async function saveDistribution(entries: unknown): Promise<SettingsState>
       }),
     ),
   );
-  revalidatePath("/settings/distribution");
+  revalidatePath("/[tenant]/settings/distribution", "page");
   return { ok: "Verteilung gespeichert." };
 }
 
@@ -125,7 +125,7 @@ export async function reprocessInboundAction(inboundId: string): Promise<Setting
   const inbound = await db.inboundEmail.findFirst({ where: { id: inboundId, tenantId: admin.tenantId }, select: { id: true } });
   if (!inbound) return { error: "Mail nicht gefunden." };
   const result = await reprocessInbound(inboundId);
-  revalidatePath("/settings/mailbox");
+  revalidatePath("/[tenant]/settings/mailbox", "page");
   return result.status === "PROCESSED" ? { ok: "Lead angelegt." } : { error: "error" in result ? result.error : "Fehler" };
 }
 
@@ -140,8 +140,8 @@ export async function manualImport(_prev: SettingsState, formData: FormData): Pr
     receivedAt: new Date(),
     text,
   }, admin.tenantId);
-  revalidatePath("/settings/mailbox");
-  revalidatePath("/leads");
+  revalidatePath("/[tenant]/settings/mailbox", "page");
+  revalidatePath("/[tenant]/leads", "page");
   if (result.status === "PROCESSED") {
     const who = result.assignedToId
       ? (await db.user.findUnique({ where: { id: result.assignedToId }, select: { displayName: true } }))?.displayName

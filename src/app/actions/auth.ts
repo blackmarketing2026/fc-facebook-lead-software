@@ -5,28 +5,34 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { createSession, deleteSession } from "@/lib/session";
 import { getTenant } from "@/lib/tenant";
+import { tenantPath } from "@/lib/tenant-paths";
 
 export type LoginState = { error?: string } | undefined;
 
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
-  const username = String(formData.get("username") ?? "").trim().toLowerCase();
+  const login = String(formData.get("username") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
-  if (!username || !password) return { error: "Bitte Benutzername und Passwort eingeben." };
+  if (!login || !password) return { error: "Bitte Benutzername und Passwort eingeben." };
 
-  // Benutzernamen gelten pro Dashboard: angemeldet wird im Mandanten der aufgerufenen Domain.
+  // Benutzer gelten pro Dashboard: angemeldet wird im Mandanten aus dem Pfad (/<slug>/login).
   const tenant = await getTenant();
   if (!tenant) return { error: "Unbekanntes Dashboard." };
-  if (tenant.status === "SUSPENDED") redirect("/suspended");
+  if (tenant.status === "SUSPENDED") redirect(tenantPath(tenant.slug, "/suspended"));
 
-  const user = await db.user.findUnique({ where: { tenantId_username: { tenantId: tenant.id, username } } });
+  // Anmeldung mit Benutzername oder E-Mail-Adresse
+  const user = login.includes("@")
+    ? await db.user.findFirst({ where: { tenantId: tenant.id, email: { equals: login, mode: "insensitive" }, active: true } })
+    : await db.user.findUnique({ where: { tenantId_username: { tenantId: tenant.id, username: login } } });
   const valid = user && user.active && (await bcrypt.compare(password, user.passwordHash));
   if (!valid) return { error: "Benutzername oder Passwort ist falsch." };
 
-  await createSession({ userId: user.id, tenantId: tenant.id, role: user.role });
-  redirect("/dashboard");
+  await createSession({ userId: user.id, tenantId: tenant.id, role: user.role }, tenant.slug);
+  redirect(tenantPath(tenant.slug));
 }
 
 export async function logout() {
-  await deleteSession();
-  redirect("/login");
+  const tenant = await getTenant();
+  if (!tenant) redirect("/");
+  await deleteSession(tenant.slug);
+  redirect(tenantPath(tenant.slug, "/login"));
 }

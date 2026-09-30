@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { assignNextSalesUser } from "./distribution";
-import { PLATFORM_TENANT_SLUG } from "./hosts";
+import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
 import { parseLeadText, type ParsedAnswer } from "./lead-parser";
 import { resolveTenantId } from "./lead-routing";
 import { sendPushToUser } from "./push";
@@ -68,7 +68,7 @@ export async function processInboundMail(mail: InboundMail, forceTenantId?: stri
       const created = await createLead(tx, tenantId, parsed.lead, inbound.id, mail.receivedAt);
       return { ...created, inboundId: inbound.id };
     });
-    await notifyNewLead(lead.id, lead.fullName, assignedToId);
+    await notifyNewLead(tenantId, lead.id, lead.fullName, assignedToId);
     return { status: "PROCESSED", leadId: lead.id, assignedToId, inboundId };
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -95,7 +95,7 @@ export async function reprocessInbound(inboundId: string): Promise<ProcessResult
     await tx.inboundEmail.update({ where: { id: inboundId }, data: { status: "PROCESSED", error: null, tenantId } });
     return createLead(tx, tenantId, parsed.lead, inboundId, inbound.receivedAt);
   });
-  await notifyNewLead(lead.id, lead.fullName, assignedToId);
+  await notifyNewLead(tenantId, lead.id, lead.fullName, assignedToId);
   return { status: "PROCESSED", leadId: lead.id, assignedToId, inboundId };
 }
 
@@ -130,12 +130,13 @@ async function createLead(
   return { lead, assignedToId };
 }
 
-async function notifyNewLead(leadId: string, name: string | null, userId: string | null) {
+async function notifyNewLead(tenantId: string, leadId: string, name: string | null, userId: string | null) {
   if (!userId) return;
+  const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { slug: true } });
   await sendPushToUser(userId, {
     title: "Neuer Lead",
     body: name ? `Neuer Lead: ${name}` : "Ein neuer Lead wurde dir zugewiesen",
-    url: `/leads/${leadId}`,
+    url: tenantPath(tenant.slug, `/leads/${leadId}`),
     tag: `lead-${leadId}`,
   }).catch((err) => console.error("[push]", err));
 }

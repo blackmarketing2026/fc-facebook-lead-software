@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import type { Role } from "@prisma/client";
 import { db } from "./db";
-import { PLATFORM_TENANT_SLUG } from "./hosts";
+import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
 import { getTenant } from "./tenant";
 
 const COOKIE = "lc_session";
@@ -20,7 +20,11 @@ function key() {
   return new TextEncoder().encode(secret);
 }
 
-export async function createSession(payload: SessionPayload) {
+/**
+ * Das Cookie gilt nur für /<slug>: So kann man gleichzeitig in mehreren Dashboards angemeldet sein
+ * (z. B. als Plattform-Admin bei Function Concept und per "Öffnen" bei einem Kunden).
+ */
+export async function createSession(payload: SessionPayload, slug: string) {
   const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -30,13 +34,13 @@ export async function createSession(payload: SessionPayload) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/",
+    path: `/${slug}`,
     maxAge: MAX_AGE,
   });
 }
 
-export async function deleteSession() {
-  (await cookies()).delete(COOKIE);
+export async function deleteSession(slug: string) {
+  (await cookies()).delete({ name: COOKIE, path: `/${slug}` });
 }
 
 export async function readSession(): Promise<SessionPayload | null> {
@@ -87,19 +91,19 @@ export async function requireUser() {
   const tenant = await getTenant();
   if (!tenant) notFound();
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(tenantPath(tenant.slug, "/login"));
   // Gesperrte Dashboards: nur der Plattform-Admin kommt noch hinein.
-  if (tenant.status === "SUSPENDED" && !user.operator) redirect("/suspended");
+  if (tenant.status === "SUSPENDED" && !user.operator) redirect(tenantPath(tenant.slug, "/suspended"));
   return user;
 }
 
 export async function requireAdmin() {
   const user = await requireUser();
-  if (user.role !== "ADMIN") redirect("/dashboard");
+  if (user.role !== "ADMIN") redirect(tenantPath(user.tenant.slug));
   return user;
 }
 
-/** Plattform-Bereich: nur auf der Function-Concept-Domain und nur mit eigenem Login (nicht per "Öffnen"). */
+/** Plattform-Bereich: nur unter /function-concept und nur mit eigenem Login (nicht per "Öffnen"). */
 export async function getPlatformAdmin() {
   const user = await getCurrentUser();
   if (!user || user.operator || !user.isPlatformAdmin || user.tenant.slug !== PLATFORM_TENANT_SLUG) return null;

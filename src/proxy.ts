@@ -1,21 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { slugFromPath, TENANT_HEADER } from "@/lib/tenant-paths";
 
-// /auth/handoff: Einmal-Link aus dem Plattform-Bereich, /suspended: Hinweis für gesperrte Dashboards.
-const PUBLIC_PATHS = ["/login", "/auth/handoff", "/suspended"];
+// /suspended: Hinweis für gesperrte Dashboards.
+const PUBLIC_SUBPATHS = ["/login", "/suspended"];
 
-// Grobe Vorprüfung: ohne Session-Cookie geht es zur Login-Seite.
-// Die echte Prüfung (Signatur, Rolle, aktiver Benutzer) passiert serverseitig in jeder Seite/Action.
+// Jeder Mandant liegt unter /<slug>/…. Grobe Vorprüfung: ohne Session-Cookie geht es zur Login-Seite
+// des Mandanten. Die echte Prüfung (Signatur, Mandant, Rolle, aktiver Benutzer) passiert serverseitig.
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hasSession = request.cookies.has("lc_session");
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const slug = slugFromPath(pathname);
 
-  if (!hasSession && !isPublic) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  // Immer neu setzen, damit niemand den Mandanten per eigenem Header vorgeben kann.
+  const headers = new Headers(request.headers);
+  headers.delete(TENANT_HEADER);
+  if (!slug) return NextResponse.next({ request: { headers } });
+  headers.set(TENANT_HEADER, slug);
+
+  const subpath = pathname.slice(slug.length + 1) || "/";
+  const isPublic = PUBLIC_SUBPATHS.some((p) => subpath.startsWith(p));
+  const isApi = subpath.startsWith("/api/");
+  // Das Session-Cookie gilt nur für /<slug>, der Browser schickt es also nur für diesen Mandanten mit.
+  if (!request.cookies.has("lc_session") && !isPublic && !isApi) {
+    return NextResponse.redirect(new URL(`/${slug}/login`, request.url));
   }
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers } });
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sw.js|icon.svg).*)"],
+  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|sw.js|icon.svg).*)"],
 };

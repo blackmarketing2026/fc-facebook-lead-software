@@ -50,7 +50,7 @@ enum LeadRouteType {
   JSON_FIELD
 }
 
-/// Ein Kunden-Dashboard (Mandant). Alle Benutzer und Leads gehören genau einem Mandanten.
+/// Ein Kunden-Dashboard (Mandant), erreichbar unter /<slug>. Alle Benutzer und Leads gehören genau einem Mandanten.
 model Tenant {
   id            String       @id @default(cuid())
   slug          String       @unique
@@ -62,24 +62,10 @@ model Tenant {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  domains       TenantDomain[]
   users         User[]
   leads         Lead[]
   inboundEmails InboundEmail[]
   leadRoutes    LeadRoute[]
-}
-
-model TenantDomain {
-  id            String    @id @default(cuid())
-  tenantId      String
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  /// Klein geschrieben, inkl. Port bei lokalen Domains (z. B. "dev.localhost:3000").
-  hostname      String    @unique
-  verified      Boolean   @default(false)
-  lastCheckedAt DateTime?
-  createdAt     DateTime  @default(now())
-
-  @@index([tenantId])
 }
 
 /// Regel, nach der eine Lead-Mail aus dem zentralen Postfach einem Mandanten zugeordnet wird.
@@ -94,16 +80,6 @@ model LeadRoute {
   createdAt DateTime      @default(now())
 
   @@index([tenantId])
-}
-
-/// Einmal-Token für den Plattform-Login in einen Mandanten ohne Passwort.
-model HandoffToken {
-  id        String    @id @default(cuid())
-  userId    String
-  tenantId  String
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
 }
 
 model User {

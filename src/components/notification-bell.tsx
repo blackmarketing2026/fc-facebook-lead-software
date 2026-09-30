@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 type Item = { id: string; kind: "reminder" | "lead"; title: string; subtitle: string; href: string; overdue?: boolean };
 type Data = { count: number; items: Item[] };
 
 export function NotificationBell() {
+  const { tenant } = useParams<{ tenant: string }>();
   const [data, setData] = useState<Data>({ count: 0, items: [] });
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -15,7 +17,7 @@ export function NotificationBell() {
     let alive = true;
     const load = async () => {
       try {
-        const res = await fetch("/api/notifications", { cache: "no-store" });
+        const res = await fetch(`/${tenant}/api/notifications`, { cache: "no-store" });
         if (res.ok && alive) setData(await res.json());
       } catch {
         // Netzwerkfehler ignorieren, nächster Versuch in 30 s
@@ -27,7 +29,7 @@ export function NotificationBell() {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [tenant]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {

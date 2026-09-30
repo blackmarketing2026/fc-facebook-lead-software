@@ -1,5 +1,6 @@
 "use client";
 
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 function urlBase64ToUint8Array(base64: string) {
@@ -8,13 +9,13 @@ function urlBase64ToUint8Array(base64: string) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
-async function subscribe(vapidPublicKey: string) {
+async function subscribe(vapidPublicKey: string, tenant: string) {
   const reg = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
   const sub =
     (await reg.pushManager.getSubscription()) ??
     (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) }));
-  await fetch("/api/push/subscribe", {
+  await fetch(`/${tenant}/api/push/subscribe`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(sub.toJSON()),
@@ -23,6 +24,7 @@ async function subscribe(vapidPublicKey: string) {
 
 /** Registriert den Service Worker und zeigt einen Hinweis, bis Push erlaubt wurde. */
 export function PushSetup({ vapidPublicKey }: { vapidPublicKey: string }) {
+  const { tenant } = useParams<{ tenant: string }>();
   const [state, setState] = useState<"hidden" | "ask" | "denied">("hidden");
   const enabled = vapidPublicKey && !vapidPublicKey.startsWith("PLATZHALTER");
 
@@ -32,7 +34,7 @@ export function PushSetup({ vapidPublicKey }: { vapidPublicKey: string }) {
     (async () => {
       await navigator.serviceWorker.register("/sw.js");
       if (Notification.permission === "granted") {
-        await subscribe(vapidPublicKey);
+        await subscribe(vapidPublicKey, tenant);
       } else if (Notification.permission === "default" && alive) {
         setState("ask");
       }
@@ -40,7 +42,7 @@ export function PushSetup({ vapidPublicKey }: { vapidPublicKey: string }) {
     return () => {
       alive = false;
     };
-  }, [enabled, vapidPublicKey]);
+  }, [enabled, vapidPublicKey, tenant]);
 
   if (state === "hidden") return null;
 
@@ -55,7 +57,7 @@ export function PushSetup({ vapidPublicKey }: { vapidPublicKey: string }) {
               onClick={async () => {
                 const perm = await Notification.requestPermission();
                 if (perm === "granted") {
-                  await subscribe(vapidPublicKey).catch((e) => console.warn(e));
+                  await subscribe(vapidPublicKey, tenant).catch((e) => console.warn(e));
                   setState("hidden");
                 } else {
                   setState("denied");

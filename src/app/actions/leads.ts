@@ -8,10 +8,10 @@ import { parseBerlinLocal } from "@/lib/format";
 import { STATUSES } from "@/lib/labels";
 import { requireAdmin, requireUser } from "@/lib/session";
 
-function refreshLead(leadId: string) {
-  revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/leads");
-  revalidatePath("/dashboard");
+function refreshLead() {
+  revalidatePath("/[tenant]/leads/[id]", "page");
+  revalidatePath("/[tenant]/leads", "page");
+  revalidatePath("/[tenant]/dashboard", "page");
 }
 
 export async function updateStatus(leadId: string, status: LeadStatus) {
@@ -28,7 +28,7 @@ export async function updateStatus(leadId: string, status: LeadStatus) {
       activities: { create: { type: "STATUS_CHANGED", userId: user.id, meta: { from: lead.status, to: status } } },
     },
   });
-  refreshLead(leadId);
+  refreshLead();
 }
 
 export type FormState = { error?: string; ok?: boolean } | undefined;
@@ -41,7 +41,7 @@ export async function addNote(leadId: string, _prev: FormState, formData: FormDa
   if (text.length > 10_000) return { error: "Notiz ist zu lang (max. 10.000 Zeichen)." };
 
   await db.note.create({ data: { leadId, authorId: user.id, text } });
-  refreshLead(leadId);
+  refreshLead();
   return { ok: true };
 }
 
@@ -67,7 +67,7 @@ export async function trackContact(leadId: string, channel: keyof typeof CONTACT
       });
     }
   });
-  refreshLead(leadId);
+  refreshLead();
 }
 
 export async function createReminder(leadId: string, _prev: FormState, formData: FormData): Promise<FormState> {
@@ -99,7 +99,7 @@ export async function createReminder(leadId: string, _prev: FormState, formData:
       });
     }
   });
-  refreshLead(leadId);
+  refreshLead();
   return { ok: true };
 }
 
@@ -119,13 +119,13 @@ export async function completeReminder(reminderId: string) {
       data: { leadId: reminder.leadId, userId: user.id, type: "REMINDER_DONE", meta: { title: reminder.title } },
     }),
   ]);
-  refreshLead(reminder.leadId);
+  refreshLead();
 }
 
 export async function deleteReminder(reminderId: string) {
-  const { reminder } = await getOwnReminder(reminderId);
+  await getOwnReminder(reminderId);
   await db.reminder.delete({ where: { id: reminderId } });
-  refreshLead(reminder.leadId);
+  refreshLead();
 }
 
 export async function reassignLead(leadId: string, userId: string) {
@@ -140,5 +140,5 @@ export async function reassignLead(leadId: string, userId: string) {
     db.reminder.updateMany({ where: { leadId, done: false }, data: { userId, notifiedAt: null } }),
     db.activity.create({ data: { leadId, userId: admin.id, type: "ASSIGNED", meta: { toUserId: userId, auto: false } } }),
   ]);
-  refreshLead(leadId);
+  refreshLead();
 }

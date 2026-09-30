@@ -2,7 +2,7 @@
 
 Empfängt Leads per E-Mail, verteilt sie automatisch per gewichtetem Round-Robin an die Vertriebler und ermöglicht die Bearbeitung: Anruf-, WhatsApp- und E-Mail-Buttons, Gesprächsprotokoll, Status, Rückruf-Termine mit Erinnerung.
 
-**Mandantenfähig:** Ein Deployment, eine Datenbank, beliebig viele Kunden-Dashboards mit eigener Domain. Function Concept verwaltet alle Dashboards zentral im Bereich **Plattform**.
+**Mandantenfähig:** Ein Deployment, eine Datenbank, eine Domain, beliebig viele Kunden-Dashboards unter eigenem Pfad (z. B. `/martin`). Function Concept verwaltet alle Dashboards zentral im Bereich **Plattform** (`/function-concept/platform`).
 
 **Stack:** Next.js 16 (App Router), PostgreSQL + Prisma 6, Tailwind 4, imapflow, web-push.
 
@@ -14,7 +14,7 @@ cp .env.example .env         # SESSION_SECRET setzen (siehe Kommentar in der Dat
 npm run db:local             # Terminal 1: eingebettetes PostgreSQL auf Port 5433
 npm run db:migrate           # einmalig: Tabellen anlegen
 npm run db:seed              # einmalig: Admin + Martin, Selina, Frances + Entwicklungs-Mandant
-npm run dev                  # Terminal 2: http://localhost:3000 (Function Concept), http://dev.localhost:3000 (Entwicklung)
+npm run dev                  # Terminal 2: http://localhost:3000/function-concept, http://localhost:3000/dev (Entwicklung)
 npm run worker               # Terminal 3: Postfach-Abruf + Rückruf-Erinnerungen
 ```
 
@@ -24,9 +24,11 @@ Startzugänge (änderbar in `.env` vor dem Seed, danach unter **Mitglieder**):
 |---|---|---|
 | `admin` | `admin12345` | Admin |
 | `martin`, `selina`, `frances` | `vertrieb123` | Vertrieb |
-| `admin`, `test1`, `test2` auf `dev.localhost:3000` | `vertrieb123` | Entwicklungs-Mandant |
+| `admin`, `test1`, `test2` unter `/dev` | `vertrieb123` | Entwicklungs-Mandant |
 
-Passwörter vor dem Live-Betrieb ändern.
+Passwörter vor dem Live-Betrieb ändern. Anmelden geht mit Benutzername oder E-Mail-Adresse.
+
+**Master-Account:** `account@function-concept.de` (Plattform-Admin bei Function Concept, sieht alle Dashboards inkl. Entwicklung). Wird per Migration angelegt; das Startpasswort nach dem ersten Login unter **Mitglieder** ändern.
 
 Solange kein Postfach verbunden ist, lassen sich Leads unter **Postfach → Lead manuell importieren** testen.
 
@@ -39,17 +41,14 @@ Solange kein Postfach verbunden ist, lassen sich Leads unter **Postfach → Lead
 | `APP_URL` | Öffentliche URL (für Links in .ics-Kalendereinträgen) |
 | `DATABASE_URL` | Produktions-Datenbank |
 | `CRON_SECRET` | Schützt die Cron-Routen für Postfach-Abruf und Erinnerungen |
-| `PLATFORM_HOSTS` | Weitere Domains des Plattform-Dashboards (`APP_URL`, `localhost` und `*.vercel.app` gelten automatisch) |
-| `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID` | Optional: Kunden-Domains automatisch im Vercel-Projekt eintragen und prüfen |
 
 Browser-Push funktioniert nur über **HTTPS** (oder `localhost`).
 
 ## Mandanten (Kunden-Dashboards)
 
-- **Erkennung per Domain** (`src/lib/tenant.ts`): Jede Anfrage wird anhand der aufgerufenen Domain einem Mandanten zugeordnet (`TenantDomain`). Die Plattform-Domain gehört zu „Function Concept“. Unbekannte Domains ergeben 404. Benutzernamen gelten pro Mandant, eine Session nur für ihre Domain.
-- **Plattform-Bereich** (`/platform`, nur Plattform-Admins auf der Function-Concept-Domain): Dashboards anlegen (mit erstem Admin, z. B. dem Kunden), Domains verbinden und prüfen, Lead-Zuordnungsregeln, Feature-Schalter, weitere Admins, sperren, als JSON exportieren.
-- **Öffnen ohne Passwort:** „Öffnen“ erzeugt einen Einmal-Link (60 s gültig) auf die Kunden-Domain und meldet den Plattform-Admin dort als Admin an. Ein gelbes Banner zeigt den Plattform-Zugriff an. Gesperrte Dashboards bleiben für den Plattform-Admin zugänglich.
-- **DNS:** Unter **Plattform → Plattform-Einstellungen** stehen CNAME-Ziel und A-Eintrag. Kunden sehen unter **Domain**, was sie bei ihrem Domain-Anbieter eintragen müssen. Ohne Vercel-API-Token muss die Domain zusätzlich im Vercel-Dashboard unter *Settings → Domains* hinzugefügt werden.
+- **Erkennung per Pfad** (`src/proxy.ts`, `src/lib/tenant.ts`): Die erste Pfad-Ebene ist das Kürzel des Mandanten (`/martin/leads`). Alle Seiten liegen unter `src/app/[tenant]/`. Unbekannte Kürzel ergeben 404. Benutzernamen gelten pro Mandant; das Session-Cookie gilt nur für `/<kürzel>`, man kann also in mehreren Dashboards gleichzeitig angemeldet sein.
+- **Plattform-Bereich** (`/function-concept/platform`, nur Plattform-Admins mit eigenem Login): Dashboards anlegen (mit erstem Admin, z. B. dem Kunden), Lead-Zuordnungsregeln, Feature-Schalter, weitere Admins, sperren, als JSON exportieren.
+- **Öffnen ohne Passwort:** „Öffnen“ meldet den Plattform-Admin direkt als Admin im Kunden-Dashboard an. Ein gelbes Banner zeigt den Plattform-Zugriff an und führt zurück zur Plattform. Gesperrte Dashboards bleiben für den Plattform-Admin zugänglich.
 - **Lead-Zuordnung** (`src/lib/lead-routing.ts`): Alle Leads kommen im zentralen Postfach an. Regeln pro Mandant: Empfänger enthält X (z. B. ein Alias `martin@function-concept.com`, der ins zentrale Postfach weiterleitet), Betreff enthält X oder JSON-Feld `feld=wert`. Ohne passende Regel geht der Lead an Function Concept.
 - **Entwicklungs-Mandant und Feature-Schalter** (`src/lib/features.ts`): Neue Funktionen kommen in die Liste `FEATURES` und werden mit `hasFeature(tenant, key)` abgefragt. Der Entwicklungs-Mandant hat alle aktiv, für Kunden werden sie im Plattform-Bereich einzeln freigeschaltet.
 

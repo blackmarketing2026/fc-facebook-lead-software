@@ -43,16 +43,11 @@ async function main() {
     });
   }
 
-  // Entwicklungs-Mandant: lokal unter http://dev.localhost:3000, alle Feature-Schalter aktiv
+  // Entwicklungs-Mandant unter /dev, alle Feature-Schalter aktiv (gleiche ID wie in der Migration)
   const dev = await db.tenant.upsert({
     where: { slug: "dev" },
     update: {},
-    create: {
-      slug: "dev",
-      name: "Entwicklung",
-      isDevelopment: true,
-      domains: { create: { hostname: "dev.localhost:3000", verified: true } },
-    },
+    create: { id: "tenant_dev", slug: "dev", name: "Entwicklung", isDevelopment: true },
   });
   const devUsers = [
     { username: "admin", displayName: "Dev Admin", email: "dev-admin@example.com", role: "ADMIN" as const },
@@ -88,7 +83,7 @@ async function main() {
 
   console.log(
     `Seed fertig: Plattform-Admin "${adminUser}" (Function Concept), Vertriebler martin/selina/frances; ` +
-      `Entwicklungs-Mandant unter http://dev.localhost:3000 (admin/test1/test2, Passwort aus SEED_SALES_PASSWORD).`,
+      `Entwicklungs-Mandant unter http://localhost:3000/dev (admin/test1/test2, Passwort aus SEED_SALES_PASSWORD).`,
   );
 }
 

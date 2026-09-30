@@ -1,6 +1,5 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { Prisma, type LeadRouteType } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
@@ -8,13 +7,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { FEATURE_KEYS } from "@/lib/features";
-import { HANDOFF_TTL_MS } from "@/lib/handoff";
-import { originFor, parseHostnameInput, PLATFORM_TENANT_SLUG } from "@/lib/hosts";
-import { requirePlatformAdmin } from "@/lib/session";
-import { getDnsTarget } from "@/lib/tenant";
-import { addDomainToVercel, checkDomain, removeDomainFromVercel } from "@/lib/vercel";
+import { createSession, requirePlatformAdmin } from "@/lib/session";
+import { isValidSlug, PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 
 export type PlatformState = { error?: string; ok?: string } | undefined;
+
+const PLATFORM = tenantPath(PLATFORM_TENANT_SLUG, "/platform");
 
 function firstError(err: z.ZodError) {
   return err.issues[0]?.message ?? "Ungültige Eingabe";
@@ -25,8 +23,8 @@ function isUniqueError(err: unknown) {
 }
 
 function refresh(tenantId?: string) {
-  revalidatePath("/platform");
-  if (tenantId) revalidatePath(`/platform/tenants/${tenantId}`);
+  revalidatePath(PLATFORM);
+  if (tenantId) revalidatePath(`${PLATFORM}/tenants/${tenantId}`);
 }
 
 const adminSchema = z.object({
@@ -46,10 +44,10 @@ const tenantSchema = z.object({
     .string()
     .trim()
     .toLowerCase()
-    .regex(/^[a-z0-9-]{2,40}$/, "Kürzel: 2–40 Zeichen, nur a–z, 0–9 und Minus"),
+    .refine(isValidSlug, "Kürzel: 1–40 Zeichen, nur a–z, 0–9 und Minus (nicht am Anfang/Ende); einige Wörter sind reserviert"),
 });
 
-/** Neues Kunden-Dashboard mit erstem Admin (z. B. Martin) und optional eigener Domain. */
+/** Neues Kunden-Dashboard unter /<kürzel> mit erstem Admin (z. B. Martin). */
 export async function createTenant(_prev: PlatformState, formData: FormData): Promise<PlatformState> {
   await requirePlatformAdmin();
   const data = Object.fromEntries(formData);
@@ -58,17 +56,12 @@ export async function createTenant(_prev: PlatformState, formData: FormData): Pr
   const admin = adminSchema.safeParse(data);
   if (!admin.success) return { error: firstError(admin.error) };
 
-  const domainInput = String(formData.get("domain") ?? "").trim();
-  const hostname = domainInput ? parseHostnameInput(domainInput) : null;
-  if (domainInput && !hostname) return { error: "Ungültige Domain, z. B. leads.martin-versicherung.de" };
-
   let tenantId: string;
   try {
     const created = await db.tenant.create({
       data: {
         ...tenant.data,
         isDevelopment: formData.get("isDevelopment") === "on",
-        domains: hostname ? { create: { hostname } } : undefined,
         users: {
           create: {
             username: admin.data.adminUsername,
@@ -82,13 +75,12 @@ export async function createTenant(_prev: PlatformState, formData: FormData): Pr
     });
     tenantId = created.id;
   } catch (err) {
-    if (isUniqueError(err)) return { error: "Kürzel oder Domain ist schon vergeben." };
+    if (isUniqueError(err)) return { error: "Dieses Kürzel ist schon vergeben." };
     throw err;
   }
 
-  if (hostname) await addDomainToVercel(hostname);
   refresh();
-  redirect(`/platform/tenants/${tenantId}`);
+  redirect(`${PLATFORM}/tenants/${tenantId}`);
 }
 
 export async function renameTenant(tenantId: string, _prev: PlatformState, formData: FormData): Promise<PlatformState> {
@@ -115,36 +107,6 @@ export async function setFeature(tenantId: string, key: string, enabled: boolean
   const features = enabled ? [...new Set([...tenant.features, key])] : tenant.features.filter((f) => f !== key);
   await db.tenant.update({ where: { id: tenantId }, data: { features } });
   refresh(tenantId);
-}
-
-export async function addDomain(tenantId: string, _prev: PlatformState, formData: FormData): Promise<PlatformState> {
-  await requirePlatformAdmin();
-  const hostname = parseHostnameInput(String(formData.get("domain") ?? ""));
-  if (!hostname) return { error: "Ungültige Domain, z. B. leads.martin-versicherung.de" };
-  try {
-    await db.tenantDomain.create({ data: { tenantId, hostname } });
-  } catch (err) {
-    if (isUniqueError(err)) return { error: "Diese Domain ist schon einem Dashboard zugeordnet." };
-    throw err;
-  }
-  const vercel = await addDomainToVercel(hostname);
-  refresh(tenantId);
-  return vercel.ok ? { ok: "Domain hinzugefügt und in Vercel eingetragen." } : { ok: `Domain hinzugefügt. ${vercel.message}` };
-}
-
-export async function removeDomain(domainId: string) {
-  await requirePlatformAdmin();
-  const domain = await db.tenantDomain.delete({ where: { id: domainId } });
-  await removeDomainFromVercel(domain.hostname);
-  refresh(domain.tenantId);
-}
-
-export async function verifyDomain(domainId: string) {
-  await requirePlatformAdmin();
-  const domain = await db.tenantDomain.findUniqueOrThrow({ where: { id: domainId } });
-  const result = await checkDomain(domain.hostname, await getDnsTarget());
-  await db.tenantDomain.update({ where: { id: domainId }, data: { verified: result.connected, lastCheckedAt: new Date() } });
-  refresh(domain.tenantId);
 }
 
 const routeSchema = z.object({
@@ -195,37 +157,12 @@ export async function addTenantAdmin(tenantId: string, _prev: PlatformState, for
   return { ok: "Admin angelegt." };
 }
 
-/** "Öffnen": Einmal-Link erzeugen und ohne Passwort ins Kunden-Dashboard springen. */
+/** "Öffnen": ohne Passwort als Admin ins Kunden-Dashboard (Session gilt nur für dessen Pfad). */
 export async function openTenant(tenantId: string) {
   const admin = await requirePlatformAdmin();
-  const tenant = await db.tenant.findUniqueOrThrow({
-    where: { id: tenantId },
-    include: { domains: { orderBy: [{ verified: "desc" }, { createdAt: "asc" }] } },
-  });
-  if (tenant.id === admin.tenantId) redirect("/dashboard");
-  const domain = tenant.domains[0];
-  if (!domain) throw new Error("Dieses Dashboard hat noch keine Domain");
-
-  const token = randomBytes(32).toString("hex");
-  await db.handoffToken.create({
-    data: { id: token, userId: admin.id, tenantId: tenant.id, expiresAt: new Date(Date.now() + HANDOFF_TTL_MS) },
-  });
-  // Abgelaufene Tokens nebenbei aufräumen.
-  await db.handoffToken.deleteMany({ where: { expiresAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } } });
-  redirect(`${originFor(domain.hostname)}/auth/handoff?token=${token}`);
-}
-
-export async function savePlatformSettings(_prev: PlatformState, formData: FormData): Promise<PlatformState> {
-  await requirePlatformAdmin();
-  const cnameTarget = String(formData.get("cnameTarget") ?? "").trim().toLowerCase().replace(/\.$/, "");
-  const aRecord = String(formData.get("aRecord") ?? "").trim();
-  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(cnameTarget)) return { error: "CNAME-Ziel muss ein Hostname sein, z. B. cname.vercel-dns.com" };
-  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(aRecord)) return { error: "A-Eintrag muss eine IPv4-Adresse sein, z. B. 76.76.21.21" };
-  await db.$transaction([
-    db.setting.upsert({ where: { key: "platform.cnameTarget" }, create: { key: "platform.cnameTarget", value: cnameTarget }, update: { value: cnameTarget } }),
-    db.setting.upsert({ where: { key: "platform.aRecord" }, create: { key: "platform.aRecord", value: aRecord }, update: { value: aRecord } }),
-  ]);
-  revalidatePath("/platform", "layout");
-  revalidatePath("/settings/domain");
-  return { ok: "Gespeichert." };
+  const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+  if (tenant.id !== admin.tenantId) {
+    await createSession({ userId: admin.id, tenantId: tenant.id, role: "ADMIN", operator: true }, tenant.slug);
+  }
+  redirect(tenantPath(tenant.slug));
 }

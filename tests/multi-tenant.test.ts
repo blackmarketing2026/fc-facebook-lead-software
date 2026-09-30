@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { hasFeature } from "@/lib/features";
-import { handoffError } from "@/lib/handoff";
-import { dnsRecordFor, isPlatformHost, normalizeHost, originFor, parseHostnameInput } from "@/lib/hosts";
 import { parseLeadText } from "@/lib/lead-parser";
 import { resolveTenantId, type RouteRule } from "@/lib/lead-routing";
+import { isValidSlug, slugFromPath, tenantPath } from "@/lib/tenant-paths";
 
 const rules: RouteRule[] = [
   { tenantId: "martin", type: "RECIPIENT", pattern: "martin@function-concept.com", priority: 0 },
@@ -40,33 +39,27 @@ describe("resolveTenantId", () => {
   });
 });
 
-describe("hosts", () => {
-  it("normalisiert Hosts und Eingaben", () => {
-    expect(normalizeHost("Leads.Martin.DE.")).toBe("leads.martin.de");
-    expect(parseHostnameInput("https://Leads.Martin.de/login")).toBe("leads.martin.de");
-    expect(parseHostnameInput("martin.localhost:3000")).toBe("martin.localhost:3000");
-    expect(parseHostnameInput("kein host")).toBeNull();
+describe("Mandanten-Pfade", () => {
+  it("baut Pfade mit Kürzel", () => {
+    expect(tenantPath("martin")).toBe("/martin/dashboard");
+    expect(tenantPath("martin", "/leads")).toBe("/martin/leads");
+    expect(tenantPath("martin", "leads/1")).toBe("/martin/leads/1");
   });
 
-  it("erkennt die Plattform-Domain", () => {
-    const env = { APP_URL: "https://leads.function-concept.com", PLATFORM_HOSTS: "admin.function-concept.com" };
-    expect(isPlatformHost("leads.function-concept.com", env)).toBe(true);
-    expect(isPlatformHost("admin.function-concept.com", env)).toBe(true);
-    expect(isPlatformHost("localhost:3000", env)).toBe(true);
-    expect(isPlatformHost("fc-facebook-lead-software.vercel.app", env)).toBe(true);
-    expect(isPlatformHost("leads.martin.de", env)).toBe(false);
-    expect(isPlatformHost("dev.localhost:3000", env)).toBe(false);
+  it("liest das Kürzel aus dem Pfad", () => {
+    expect(slugFromPath("/martin/leads/1")).toBe("martin");
+    expect(slugFromPath("/Function-Concept")).toBe("function-concept");
+    expect(slugFromPath("/")).toBeNull();
+    expect(slugFromPath("/api/cron/mailbox")).toBeNull();
   });
 
-  it("gibt den passenden DNS-Eintrag vor", () => {
-    const target = { cnameTarget: "cname.vercel-dns.com", aRecord: "76.76.21.21" };
-    expect(dnsRecordFor("leads.martin.de", target)).toEqual({ type: "CNAME", name: "leads", value: "cname.vercel-dns.com" });
-    expect(dnsRecordFor("martin.de", target)).toEqual({ type: "A", name: "@", value: "76.76.21.21" });
-  });
-
-  it("nutzt lokal http, sonst https", () => {
-    expect(originFor("dev.localhost:3000")).toBe("http://dev.localhost:3000");
-    expect(originFor("leads.martin.de")).toBe("https://leads.martin.de");
+  it("prüft Kürzel und reservierte Wörter", () => {
+    expect(isValidSlug("martin")).toBe(true);
+    expect(isValidSlug("mayer-versicherung")).toBe(true);
+    expect(isValidSlug("-martin")).toBe(false);
+    expect(isValidSlug("Martin")).toBe(false);
+    expect(isValidSlug("api")).toBe(false);
+    expect(isValidSlug("platform")).toBe(false);
   });
 });
 
@@ -75,21 +68,5 @@ describe("Feature-Schalter", () => {
     expect(hasFeature({ isDevelopment: true, features: [] }, "leads-csv-export")).toBe(true);
     expect(hasFeature({ isDevelopment: false, features: [] }, "leads-csv-export")).toBe(false);
     expect(hasFeature({ isDevelopment: false, features: ["leads-csv-export"] }, "leads-csv-export")).toBe(true);
-  });
-});
-
-describe("Handoff-Token", () => {
-  const now = new Date("2026-09-30T12:00:00Z");
-  const valid = { tenantId: "t1", expiresAt: new Date(now.getTime() + 30_000), usedAt: null };
-
-  it("akzeptiert gültige Tokens", () => {
-    expect(handoffError(valid, "t1", now)).toBeNull();
-  });
-
-  it("lehnt benutzte, abgelaufene und fremde Tokens ab", () => {
-    expect(handoffError(null, "t1", now)).not.toBeNull();
-    expect(handoffError({ ...valid, usedAt: now }, "t1", now)).toMatch(/bereits/);
-    expect(handoffError({ ...valid, expiresAt: new Date(now.getTime() - 1) }, "t1", now)).toMatch(/abgelaufen/);
-    expect(handoffError(valid, "t2", now)).toMatch(/anderen/);
   });
 });
