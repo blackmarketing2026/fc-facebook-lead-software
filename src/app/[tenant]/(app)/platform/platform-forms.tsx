@@ -26,24 +26,25 @@ function useResetOnOk(state: PlatformState) {
   return ref;
 }
 
-function AdminFields() {
+function AdminFields({ optional = false }: { optional?: boolean }) {
+  const required = !optional;
   return (
     <>
       <label className="block">
         <span className="label">Name des Admins</span>
-        <input name="adminDisplayName" required className="input" placeholder="Martin Mustermann" />
+        <input name="adminDisplayName" required={required} className="input" placeholder="Martin Mustermann" />
       </label>
       <label className="block">
         <span className="label">Benutzername</span>
-        <input name="adminUsername" required className="input" placeholder="martin" autoComplete="off" />
+        <input name="adminUsername" required={required} className="input" placeholder="martin" autoComplete="off" />
       </label>
       <label className="block">
         <span className="label">E-Mail</span>
-        <input name="adminEmail" type="email" required className="input" />
+        <input name="adminEmail" type="email" required={required} className="input" />
       </label>
       <label className="block">
         <span className="label">Startpasswort</span>
-        <input name="adminPassword" type="password" required minLength={8} className="input" autoComplete="new-password" />
+        <input name="adminPassword" type="password" required={required} minLength={8} className="input" autoComplete="new-password" />
       </label>
     </>
   );
@@ -63,9 +64,15 @@ export function CreateTenantForm() {
           <input name="slug" required className="input" placeholder="martin" autoComplete="off" pattern="[a-z0-9-]+" />
         </label>
       </div>
-      <h3 className="text-sm font-semibold text-slate-700">Erster Admin (Hauptnutzer des Kunden)</h3>
+      <div>
+        <h3 className="text-sm font-semibold text-slate-700">Erster Admin (optional)</h3>
+        <p className="text-xs text-slate-500">
+          Leer lassen, um das Dashboard ohne eigenen Login anzulegen – du öffnest es über den Master-Login und kannst
+          Admins später hinzufügen.
+        </p>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminFields />
+        <AdminFields optional />
       </div>
       <label className="flex items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" name="isDevelopment" className="h-4 w-4" />
