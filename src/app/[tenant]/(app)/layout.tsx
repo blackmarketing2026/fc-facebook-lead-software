@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { logout } from "@/app/actions/auth";
+import { LeadWatcher } from "@/components/lead-watcher";
 import { NavLinks } from "@/components/nav-links";
 import { NotificationBell } from "@/components/notification-bell";
 import { PushSetup } from "@/components/push-setup";
@@ -11,6 +12,9 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
   const user = await requireUser();
   const platformAdmin = await getPlatformAdmin();
   const t = (path: string) => tenantPath(user.tenant.slug, path);
+  // Ist Push eingerichtet, fragt schon PushSetup nach der Erlaubnis für Benachrichtigungen.
+  const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+  const pushEnabled = Boolean(vapid) && !vapid.startsWith("PLATZHALTER");
   const links = [
     { href: t("/dashboard"), label: "Dashboard" },
     { href: t("/leads"), label: "Leads" },
@@ -56,6 +60,7 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
         </div>
       </header>
       <PushSetup vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""} />
+      <LeadWatcher askPermission={!pushEnabled} />
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
     </div>
   );

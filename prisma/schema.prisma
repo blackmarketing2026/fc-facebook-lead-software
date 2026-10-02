@@ -129,6 +129,8 @@ model Lead {
   assignedTo    User?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
   sourceEmailId String?       @unique
   sourceEmail   InboundEmail? @relation(fields: [sourceEmailId], references: [id], onDelete: SetNull)
+  /// Zeitpunkt des Anlegens in der App (receivedAt ist das Mail-Datum) – für die Live-Benachrichtigung.
+  createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   answers    LeadAnswer[]
@@ -138,6 +140,7 @@ model Lead {
 
   @@index([tenantId, receivedAt])
   @@index([assignedToId, receivedAt])
+  @@index([tenantId, createdAt])
 }
 
 model LeadAnswer {

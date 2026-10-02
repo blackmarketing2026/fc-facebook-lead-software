@@ -45,23 +45,24 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
   const { id } = await props.params;
   await getAccessibleLeadOr404(user, id);
 
-  const [lead, salesUsers] = await Promise.all([
-    db.lead.findUniqueOrThrow({
+  const lead = await db.lead.findUniqueOrThrow({
       where: { id },
       include: {
+        tenant: { select: { id: true, name: true, code: true } },
         assignedTo: { select: { id: true, displayName: true } },
         answers: { orderBy: { position: "asc" } },
         notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { displayName: true } } } },
         reminders: { orderBy: [{ done: "asc" }, { dueAt: "asc" }], include: { user: { select: { displayName: true } } } },
         activities: { orderBy: { createdAt: "desc" }, include: { user: { select: { displayName: true } } } },
       },
-    }),
-    db.user.findMany({
-      where: { tenantId: user.tenantId, role: "SALES", active: true },
-      orderBy: { distOrder: "asc" },
-      select: { id: true, displayName: true },
-    }),
-  ]);
+    });
+  // Vertriebler des Dashboards, zu dem der Lead gehört (im Hauptaccount nicht zwingend das eigene).
+  const salesUsers = await db.user.findMany({
+    where: { tenantId: lead.tenantId, role: "SALES", active: true },
+    orderBy: { distOrder: "asc" },
+    select: { id: true, displayName: true },
+  });
+  const foreignTenant = lead.tenantId !== user.tenantId;
   const userNames = new Map(salesUsers.map((u) => [u.id, u.displayName]));
   if (lead.assignedTo) userNames.set(lead.assignedTo.id, lead.assignedTo.displayName);
 
@@ -85,6 +86,11 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           <div>
             <h1 className="text-2xl font-semibold">{lead.fullName || "Unbekannt"}</h1>
             <p className="mt-1 text-sm text-slate-500">
+              {foreignTenant && (
+                <span className="badge mr-2 bg-slate-900 text-white">
+                  {lead.tenant.code} · {lead.tenant.name}
+                </span>
+              )}
               Eingegangen am {formatDateTime(lead.receivedAt)}
               {lead.language && ` · Sprache: ${lead.language}`}
             </p>

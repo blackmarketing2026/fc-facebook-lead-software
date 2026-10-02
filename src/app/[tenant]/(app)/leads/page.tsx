@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { hasFeature } from "@/lib/features";
 import { formatDateTime } from "@/lib/format";
 import { STATUS_LABELS, STATUSES } from "@/lib/labels";
+import { seesAllTenants } from "@/lib/access";
 import { leadListFilters, leadListWhere } from "@/lib/lead-filters";
 import { requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
@@ -20,6 +21,7 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
   const { q, status, assignee, from, to } = filters;
   const page = Math.max(1, Number(typeof sp.page === "string" ? sp.page : 1) || 1);
   const where = leadListWhere(user, filters);
+  const allTenants = seesAllTenants(user);
 
   const [leads, total, salesUsers] = await Promise.all([
     db.lead.findMany({
@@ -27,7 +29,7 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
       orderBy: { receivedAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { assignedTo: { select: { displayName: true } } },
+      include: { assignedTo: { select: { displayName: true } }, tenant: { select: { name: true, code: true } } },
     }),
     db.lead.count({ where }),
     user.role === "ADMIN"
@@ -96,6 +98,7 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
         <table className="min-w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              {allTenants && <th className="px-4 py-3">Plattform</th>}
               <th className="px-4 py-3">Eingang</th>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Telefon</th>
@@ -107,13 +110,18 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
           <tbody className="divide-y divide-slate-100">
             {leads.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
                   Keine Leads gefunden.
                 </td>
               </tr>
             )}
             {leads.map((lead) => (
               <tr key={lead.id} className="hover:bg-slate-50">
+                {allTenants && (
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <span className="font-mono text-xs text-slate-400">{lead.tenant.code}</span> {lead.tenant.name}
+                  </td>
+                )}
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDateTime(lead.receivedAt)}</td>
                 <td className="px-4 py-3 font-medium">
                   <Link href={`${base}/${lead.id}`} className="text-blue-700 hover:underline">

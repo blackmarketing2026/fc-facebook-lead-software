@@ -131,7 +131,9 @@ export async function deleteReminder(reminderId: string) {
 export async function reassignLead(leadId: string, userId: string) {
   const admin = await requireAdmin();
   await getAccessibleLeadOr404(admin, leadId);
-  const target = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId, active: true } });
+  // Nur an Vertriebler des Dashboards, zu dem der Lead gehört (wichtig für die Gesamtansicht im Hauptaccount).
+  const { tenantId } = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { tenantId: true } });
+  const target = await db.user.findFirst({ where: { id: userId, tenantId, active: true } });
   if (!target) throw new Error("Benutzer nicht gefunden");
 
   await db.$transaction([
