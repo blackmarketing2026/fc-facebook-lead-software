@@ -29,6 +29,36 @@ describe("parseLeadText", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("parst das echte Lead-Format mit Umlauten", () => {
+    const mail = `[{"name":"Sprache","values":["Deutsch"]},{"name":"email","values":["max.mustermann@example.com"]},{"name":"full_name","values":["Gunnar Deißner"]},{"name":"phone_number","values":["+4915100000002"]},{"name":"welche_bausteine_benötigst_du_für_deinen_rechtschutz?","values":["privatrechtsschutz"]},{"name":"angenommen,_du_gerätst_morgen_unverschuldet_in_einen_rechtsstreit:_was_wäre_dir_dann_am_wichtigsten?","values":["sofort_einen_anwalt_einschalten_zu_können"]}]`;
+    const result = parseLeadText(mail);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lead.fullName).toBe("Gunnar Deißner");
+    expect(result.lead.email).toBe("max.mustermann@example.com");
+    expect(result.lead.answers.at(-1)?.answers).toEqual(["Sofort einen anwalt einschalten zu können"]);
+  });
+
+  it("verträgt Zeilenumbrüche des Mailprogramms mitten in den Werten", () => {
+    const mail = `[{"name":"Sprache","values":["Deutsch"]},{"name":"welche_bausteine_benötigst_du_für_deinen_rechtschutz?","values":["strafrechtsschutz"]},{"name":"email","values":["
+max.mustermann@example.com"]},{"name":"full_name","values":["Max
+Mustermann"]},{"name":"phone_number","values":["+4915100000001"]}]`;
+    const result = parseLeadText(mail);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lead.email).toBe("max.mustermann@example.com");
+    expect(result.lead.fullName).toBe("Max Mustermann");
+    expect(result.lead.phone).toBe("+4915100000001");
+    expect(result.lead.language).toBe("Deutsch");
+  });
+
+  it("verträgt typografische Anführungszeichen und HTML-Entities", () => {
+    const smart = parseLeadText(`[{“name”:“full_name”,“values”:[“Max Mustermann”]}]`);
+    expect(smart.ok && smart.lead.fullName).toBe("Max Mustermann");
+    const html = parseLeadText("", `<p>[{&#34;name&#34;:&#34;full_name&#34;,&#34;values&#34;:[&#34;J&ouml;rg&#34;]}]</p>`);
+    expect(html.ok && html.lead.fullName).toBe("Jörg");
+  });
+
   it("lehnt Mails ohne JSON ab", () => {
     expect(parseLeadText("Hallo, wie geht's?").ok).toBe(false);
     expect(parseLeadText("[1, 2, 3]").ok).toBe(false);

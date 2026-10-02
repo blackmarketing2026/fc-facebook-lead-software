@@ -39,19 +39,41 @@ export function humanize(value: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+const NAMED_ENTITIES: Record<string, string> = {
+  quot: '"', amp: "&", lt: "<", gt: ">", nbsp: " ",
+  auml: "ä", ouml: "ö", uuml: "ü", Auml: "Ä", Ouml: "Ö", Uuml: "Ü", szlig: "ß",
+};
+
 function stripHtml(html: string): string {
   return html
     .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div)>/gi, "\n")
     .replace(/<[^>]+>/g, "")
-    .replace(/&quot;/g, '"')
-    .replace(/&#34;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ");
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+    .replace(/&([a-z]+);/gi, (m, name) => NAMED_ENTITIES[name] ?? m);
 }
 
-/** Sucht das erste JSON-Array im Text, das sich parsen lässt. */
+/**
+ * Repariert, was Mailprogramme am JSON verändern: Zeilenumbrüche mitten in Werten (automatischer
+ * Umbruch langer Zeilen) und typografische Anführungszeichen. Außerhalb von Werten sind Leerzeichen
+ * für JSON egal, innerhalb wird aus dem Umbruch ein Leerzeichen.
+ */
+function repairMailJson(text: string): string {
+  return text
+    .replace(/[“”„‟″«»]/g, '"')
+    .replace(/[ \t ]*\r?\n[ \t ]*/g, " ");
+}
+
+/** Array im Lead-Format [{name, values}] – innere Arrays wie ["Deutsch"] zählen nicht. */
+function isLeadArray(value: unknown): value is unknown[] {
+  return (
+    Array.isArray(value) &&
+    value.some((item) => typeof item === "object" && item !== null && typeof (item as { name?: unknown }).name === "string")
+  );
+}
+
+/** Sucht das erste JSON-Array im Lead-Format im Text. */
 function extractJsonArray(text: string): unknown[] | null {
   let start = text.indexOf("[");
   while (start !== -1) {
@@ -60,7 +82,7 @@ function extractJsonArray(text: string): unknown[] | null {
     while (end > start) {
       try {
         const value = JSON.parse(text.slice(start, end + 1));
-        if (Array.isArray(value)) return value;
+        if (isLeadArray(value)) return value;
       } catch {
         // weiter verkürzen
       }
@@ -71,6 +93,16 @@ function extractJsonArray(text: string): unknown[] | null {
   return null;
 }
 
+/** Sucht das JSON zuerst im Originaltext, dann in der reparierten Fassung. */
+function findJsonArray(text: string): unknown[] | null {
+  return extractJsonArray(text) ?? extractJsonArray(repairMailJson(text));
+}
+
+/** Mehrfache Leerzeichen (z. B. aus reparierten Umbrüchen) zusammenfassen. */
+function cleanValue(value: unknown): string {
+  return String(value).replace(/\s+/g, " ").trim();
+}
+
 function findField(answers: ParsedAnswer[], keys: readonly string[]): string | null {
   const hit = answers.find((a) => keys.includes(a.questionKey.toLowerCase()));
   const value = hit?.answers.find((v) => v.trim() !== "");
@@ -78,8 +110,8 @@ function findField(answers: ParsedAnswer[], keys: readonly string[]): string | n
 }
 
 export function parseLeadText(text: string, html?: string | null): ParseResult {
-  let items = extractJsonArray(text ?? "");
-  if (!items && html) items = extractJsonArray(stripHtml(html));
+  let items = findJsonArray(text ?? "");
+  if (!items && html) items = findJsonArray(stripHtml(html));
   if (!items) return { ok: false, error: "Kein JSON-Array im E-Mail-Text gefunden" };
 
   const answers: ParsedAnswer[] = [];
@@ -92,18 +124,19 @@ export function parseLeadText(text: string, html?: string | null): ParseResult {
       return { ok: false, error: "JSON-Array hat nicht das Format [{name, values}]" };
     }
     const { name, values } = item as { name: string; values?: unknown };
-    const list = Array.isArray(values) ? values.map((v) => String(v)) : values != null ? [String(values)] : [];
+    const list = Array.isArray(values) ? values.map(cleanValue) : values != null ? [cleanValue(values)] : [];
     answers.push({
       position: answers.length,
-      questionKey: name,
-      questionLabel: humanize(name),
+      questionKey: cleanValue(name),
+      questionLabel: humanize(cleanValue(name)),
       answers: list,
     });
   }
   if (answers.length === 0) return { ok: false, error: "JSON-Array ist leer" };
 
   const fullName = findField(answers, FIELD_KEYS.fullName);
-  const email = findField(answers, FIELD_KEYS.email);
+  // In einer E-Mail-Adresse kann kein Leerzeichen stehen – Reste eines Zeilenumbruchs entfernen.
+  const email = findField(answers, FIELD_KEYS.email)?.replace(/\s+/g, "") || null;
   const phone = findField(answers, FIELD_KEYS.phone);
   const language = findField(answers, FIELD_KEYS.language);
 
