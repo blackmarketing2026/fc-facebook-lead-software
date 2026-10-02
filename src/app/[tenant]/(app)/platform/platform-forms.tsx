@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   addRoute,
   addTenantAdmin,
@@ -26,25 +26,24 @@ function useResetOnOk(state: PlatformState) {
   return ref;
 }
 
-function AdminFields({ optional = false }: { optional?: boolean }) {
-  const required = !optional;
+function AdminFields() {
   return (
     <>
       <label className="block">
         <span className="label">Name des Admins</span>
-        <input name="adminDisplayName" required={required} className="input" placeholder="Martin Mustermann" />
+        <input name="adminDisplayName" required className="input" placeholder="Martin Mustermann" />
       </label>
       <label className="block">
         <span className="label">Benutzername</span>
-        <input name="adminUsername" required={required} className="input" placeholder="martin" autoComplete="off" />
+        <input name="adminUsername" required className="input" placeholder="martin" autoComplete="off" />
       </label>
       <label className="block">
         <span className="label">E-Mail</span>
-        <input name="adminEmail" type="email" required={required} className="input" />
+        <input name="adminEmail" type="email" required className="input" />
       </label>
       <label className="block">
         <span className="label">Startpasswort</span>
-        <input name="adminPassword" type="password" required={required} minLength={8} className="input" autoComplete="new-password" />
+        <input name="adminPassword" type="password" required minLength={8} className="input" autoComplete="new-password" />
       </label>
     </>
   );
@@ -52,6 +51,7 @@ function AdminFields({ optional = false }: { optional?: boolean }) {
 
 export function CreateTenantForm() {
   const [state, action, pending] = useActionState(createTenant, undefined);
+  const [withAdmin, setWithAdmin] = useState(false);
   return (
     <form action={action} className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -65,15 +65,26 @@ export function CreateTenantForm() {
         </label>
       </div>
       <div>
-        <h3 className="text-sm font-semibold text-slate-700">Erster Admin (optional)</h3>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <input
+            type="checkbox"
+            name="withAdmin"
+            checked={withAdmin}
+            onChange={(e) => setWithAdmin(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Ersten Admin für den Kunden gleich mit anlegen (optional)
+        </label>
         <p className="text-xs text-slate-500">
-          Leer lassen, um das Dashboard ohne eigenen Login anzulegen – du öffnest es über den Master-Login und kannst
+          Ohne Häkchen wird das Dashboard ohne eigenen Login angelegt – du öffnest es über den Master-Login und kannst
           Admins später hinzufügen.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminFields optional />
-      </div>
+      {withAdmin && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <AdminFields />
+        </div>
+      )}
       <label className="flex items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" name="isDevelopment" className="h-4 w-4" />
         Entwicklungs-Mandant (alle Feature-Schalter automatisch aktiv)

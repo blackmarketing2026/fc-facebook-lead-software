@@ -54,9 +54,8 @@ export async function createTenant(_prev: PlatformState, formData: FormData): Pr
   const tenant = tenantSchema.safeParse(data);
   if (!tenant.success) return { error: firstError(tenant.error) };
 
-  // Admin ist optional: alle Felder leer → Dashboard ohne Benutzer (Zugang über den Master-Login).
-  const wantsAdmin = Object.keys(adminSchema.shape).some((k) => String(data[k] ?? "").trim() !== "");
-  const admin = wantsAdmin ? adminSchema.safeParse(data) : null;
+  // Admin ist optional: ohne Häkchen → Dashboard ohne Benutzer (Zugang über den Master-Login).
+  const admin = formData.get("withAdmin") === "on" ? adminSchema.safeParse(data) : null;
   if (admin && !admin.success) return { error: firstError(admin.error) };
 
   let tenantId: string;
