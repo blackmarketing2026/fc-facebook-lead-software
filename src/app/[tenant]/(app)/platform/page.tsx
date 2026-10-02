@@ -10,7 +10,7 @@ export const metadata = { title: "Plattform" };
 export default async function PlatformPage() {
   const admin = await requirePlatformAdmin();
   const tenants = await db.tenant.findMany({
-    orderBy: [{ isDevelopment: "desc" }, { createdAt: "asc" }],
+    orderBy: { code: "asc" },
     include: { _count: { select: { leads: true, users: true } } },
   });
 
@@ -28,6 +28,7 @@ export default async function PlatformPage() {
         <table className="min-w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              <th className="px-4 py-3">ID</th>
               <th className="px-4 py-3">Dashboard</th>
               <th className="px-4 py-3">Adresse</th>
               <th className="px-4 py-3 text-right">Leads</th>
@@ -39,6 +40,7 @@ export default async function PlatformPage() {
           <tbody className="divide-y divide-slate-100">
             {tenants.map((t) => (
               <tr key={t.id} className="align-top">
+                <td className="px-4 py-3 font-mono font-semibold tabular-nums">{t.code}</td>
                 <td className="px-4 py-3">
                   <Link href={tenantPath(admin.tenant.slug, `/platform/tenants/${t.id}`)} className="font-medium text-blue-700 hover:underline">
                     {t.name}

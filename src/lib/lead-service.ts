@@ -3,7 +3,7 @@ import { db } from "./db";
 import { assignNextSalesUser } from "./distribution";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
 import { parseLeadText, type ParsedAnswer } from "./lead-parser";
-import { resolveTenantId } from "./lead-routing";
+import { resolveTenantId, tenantCodeFromSubject } from "./lead-routing";
 import { sendPushToUser } from "./push";
 
 export type InboundMail = {
@@ -23,10 +23,14 @@ export type ProcessResult =
   | { status: "PROCESSED"; leadId: string; assignedToId: string | null; inboundId: string };
 
 /**
- * Mandant für eine Mail aus dem zentralen Postfach: erste passende Zuordnungsregel,
- * sonst der Plattform-Mandant (Function Concept).
+ * Mandant für eine Mail aus dem zentralen Postfach: Dashboard-ID im Betreff, sonst erste passende
+ * Zuordnungsregel, sonst der Plattform-Mandant (Function Concept).
  */
 async function tenantForMail(mail: Pick<InboundMail, "to" | "subject">, answers: ParsedAnswer[]): Promise<string> {
+  const tenants = await db.tenant.findMany({ select: { id: true, code: true } });
+  const code = tenantCodeFromSubject(mail.subject, tenants.map((t) => t.code));
+  if (code) return tenants.find((t) => t.code === code)!.id;
+
   const rules = await db.leadRoute.findMany({ select: { tenantId: true, type: true, pattern: true, priority: true } });
   const matched = resolveTenantId(rules, mail, answers);
   if (matched) return matched;

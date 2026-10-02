@@ -40,7 +40,7 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
           {tenant.isDevelopment && <span className="badge bg-violet-100 text-violet-800">Entwicklung</span>}
           {tenant.status === "SUSPENDED" && <span className="badge bg-red-100 text-red-700">gesperrt</span>}
           <span className="text-sm text-slate-500">
-            <code>/{tenant.slug}</code> · {tenant._count.leads} Leads · angelegt {formatDateTime(tenant.createdAt)}
+            ID <code>{tenant.code}</code> · <code>/{tenant.slug}</code> · {tenant._count.leads} Leads · angelegt {formatDateTime(tenant.createdAt)}
           </span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -65,15 +65,17 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
 
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Allgemein</h2>
-        <RenameTenantForm tenantId={tenant.id} name={tenant.name} isDevelopment={tenant.isDevelopment} />
+        <RenameTenantForm tenantId={tenant.id} name={tenant.name} code={tenant.code} isDevelopment={tenant.isDevelopment} />
       </section>
 
 
       <section className="card p-5">
         <h2 className="mb-1 font-semibold">Lead-Zuordnung</h2>
         <p className="mb-4 max-w-3xl text-sm text-slate-500">
-          Alle Leads kommen im zentralen Postfach an. Passt eine dieser Regeln, landet der Lead in diesem Dashboard
-          (höhere Priorität zuerst). Leads ohne passende Regel gehen an Function Concept. Beispiele: Empfänger{" "}
+          Alle Leads kommen im zentralen Postfach an. Steht die ID <code>{tenant.code}</code> im Betreff (z. B.{" "}
+          <code>Neuer Lead ID {tenant.code}</code>), landet der Lead automatisch in diesem Dashboard. Zusätzlich können
+          hier Regeln angelegt werden (höhere Priorität zuerst). Leads ohne ID und ohne passende Regel gehen an Function
+          Concept. Beispiele: Empfänger{" "}
           <code>martin@function-concept.com</code> (Alias/Weiterleitung ins zentrale Postfach), Betreff{" "}
           <code>Martin</code>, JSON-Feld <code>mandant=martin</code>.
         </p>

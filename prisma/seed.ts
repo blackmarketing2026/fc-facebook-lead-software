@@ -12,7 +12,7 @@ async function main() {
   const platform = await db.tenant.upsert({
     where: { slug: "function-concept" },
     update: {},
-    create: { id: "tenant_function_concept", slug: "function-concept", name: "Function Concept" },
+    create: { id: "tenant_function_concept", slug: "function-concept", code: "00", name: "Function Concept" },
   });
 
   await db.user.upsert({
@@ -47,7 +47,7 @@ async function main() {
   const dev = await db.tenant.upsert({
     where: { slug: "dev" },
     update: {},
-    create: { id: "tenant_dev", slug: "dev", name: "Entwicklung", isDevelopment: true },
+    create: { id: "tenant_dev", slug: "dev", code: "99", name: "Entwicklung", isDevelopment: true },
   });
   const devUsers = [
     { username: "admin", displayName: "Dev Admin", email: "dev-admin@example.com", role: "ADMIN" as const },

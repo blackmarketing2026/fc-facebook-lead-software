@@ -54,6 +54,8 @@ enum LeadRouteType {
 model Tenant {
   id            String       @id @default(cuid())
   slug          String       @unique
+  /// Zweistellige ID ("01"–"99", Plattform "00"). Steht sie im Betreff einer Lead-Mail, landet der Lead hier.
+  code          String       @unique @db.VarChar(2)
   name          String
   status        TenantStatus @default(ACTIVE)
   /// Entwicklungs-Mandant: hat automatisch alle Feature-Schalter aktiv.

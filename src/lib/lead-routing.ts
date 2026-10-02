@@ -43,3 +43,31 @@ export function resolveTenantId(rules: RouteRule[], mail: RoutableMail, answers:
   const sorted = [...rules].sort((a, b) => b.priority - a.priority);
   return sorted.find((r) => matches(r, mail, answers))?.tenantId ?? null;
 }
+
+/** Zweistellige Dashboard-ID: "00" (Plattform) bis "99". */
+export function isValidTenantCode(code: string): boolean {
+  return /^\d{2}$/.test(code);
+}
+
+/** Nächste freie ID für ein neues Dashboard (01–99), null wenn alle vergeben sind. */
+export function nextFreeTenantCode(used: Iterable<string>): string | null {
+  const taken = new Set(used);
+  for (let n = 1; n <= 99; n++) {
+    const code = String(n).padStart(2, "0");
+    if (!taken.has(code)) return code;
+  }
+  return null;
+}
+
+/**
+ * Sucht die Dashboard-ID im Betreff. Bevorzugt ausdrücklich markierte IDs ("ID 12", "ID: 12", "#12", "[12]"),
+ * sonst die erste alleinstehende zweistellige Zahl, die zu einem Dashboard gehört. Zahlen in Datum/Uhrzeit
+ * ("02.10.", "14:30") oder längere Zahlen zählen nicht.
+ */
+export function tenantCodeFromSubject(subject: string | null | undefined, codes: Iterable<string>): string | null {
+  if (!subject) return null;
+  const known = new Set(codes);
+  const marked = [...subject.matchAll(/(?:\bID\s*[:#-]?\s*|#|\[\s*)(\d{2})(?!\d)/gi)].map((m) => m[1]);
+  const plain = [...subject.matchAll(/(?<![\d.:/])(\d{2})(?![\d.:/])/g)].map((m) => m[1]);
+  return [...marked, ...plain].find((c) => known.has(c)) ?? null;
+}

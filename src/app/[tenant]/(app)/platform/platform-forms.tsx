@@ -54,7 +54,7 @@ export function CreateTenantForm() {
   const [withAdmin, setWithAdmin] = useState(false);
   return (
     <form action={action} className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_8rem]">
         <label className="block">
           <span className="label">Name des Dashboards</span>
           <input name="name" required className="input" placeholder="Martin Versicherungsmakler" />
@@ -62,6 +62,10 @@ export function CreateTenantForm() {
         <label className="block">
           <span className="label">Kürzel (Adresse: /kürzel)</span>
           <input name="slug" required className="input" placeholder="martin" autoComplete="off" pattern="[a-z0-9-]+" />
+        </label>
+        <label className="block">
+          <span className="label">ID (Betreff)</span>
+          <input name="code" className="input" placeholder="automatisch" autoComplete="off" inputMode="numeric" pattern="[0-9]{1,2}" maxLength={2} />
         </label>
       </div>
       <div>
@@ -97,13 +101,17 @@ export function CreateTenantForm() {
   );
 }
 
-export function RenameTenantForm({ tenantId, name, isDevelopment }: { tenantId: string; name: string; isDevelopment: boolean }) {
+export function RenameTenantForm({ tenantId, name, code, isDevelopment }: { tenantId: string; name: string; code: string; isDevelopment: boolean }) {
   const [state, action, pending] = useActionState(renameTenant.bind(null, tenantId), undefined);
   return (
     <form action={action} className="flex flex-wrap items-end gap-3">
       <label className="block">
         <span className="label">Name</span>
         <input name="name" required defaultValue={name} className="input" />
+      </label>
+      <label className="block w-24">
+        <span className="label">ID (Betreff)</span>
+        <input name="code" required defaultValue={code} className="input" inputMode="numeric" pattern="[0-9]{1,2}" maxLength={2} />
       </label>
       <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
         <input type="checkbox" name="isDevelopment" defaultChecked={isDevelopment} className="h-4 w-4" />

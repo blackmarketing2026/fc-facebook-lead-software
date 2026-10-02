@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { FEATURE_KEYS, parseFeatures, serializeFeatures } from "@/lib/features";
+import { isValidTenantCode, nextFreeTenantCode } from "@/lib/lead-routing";
 import { createSession, requirePlatformAdmin } from "@/lib/session";
 import { isValidSlug, PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 
@@ -18,8 +19,23 @@ function firstError(err: z.ZodError) {
   return err.issues[0]?.message ?? "Ungültige Eingabe";
 }
 
-function isUniqueError(err: unknown) {
-  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+function isUniqueError(err: unknown, field?: string) {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") return false;
+  return !field || JSON.stringify(err.meta?.target ?? "").includes(field);
+}
+
+const CODE_TAKEN = "Diese ID ist schon an ein anderes Dashboard vergeben.";
+
+/** Eingegebene Dashboard-ID prüfen; leer = automatisch die nächste freie. */
+async function resolveCode(input: FormDataEntryValue | null): Promise<{ code: string } | { error: string }> {
+  const raw = String(input ?? "").trim();
+  if (raw) {
+    const code = raw.padStart(2, "0");
+    return isValidTenantCode(code) ? { code } : { error: "ID: zweistellige Zahl von 00 bis 99" };
+  }
+  const used = await db.tenant.findMany({ select: { code: true } });
+  const code = nextFreeTenantCode(used.map((t) => t.code));
+  return code ? { code } : { error: "Alle IDs von 01 bis 99 sind vergeben." };
 }
 
 function refresh(tenantId?: string) {
@@ -57,12 +73,15 @@ export async function createTenant(_prev: PlatformState, formData: FormData): Pr
   // Admin ist optional: ohne Häkchen → Dashboard ohne Benutzer (Zugang über den Master-Login).
   const admin = formData.get("withAdmin") === "on" ? adminSchema.safeParse(data) : null;
   if (admin && !admin.success) return { error: firstError(admin.error) };
+  const code = await resolveCode(formData.get("code"));
+  if ("error" in code) return code;
 
   let tenantId: string;
   try {
     const created = await db.tenant.create({
       data: {
         ...tenant.data,
+        code: code.code,
         isDevelopment: formData.get("isDevelopment") === "on",
         ...(admin?.success && {
           users: {
@@ -79,6 +98,7 @@ export async function createTenant(_prev: PlatformState, formData: FormData): Pr
     });
     tenantId = created.id;
   } catch (err) {
+    if (isUniqueError(err, "code")) return { error: CODE_TAKEN };
     if (isUniqueError(err)) return { error: "Dieses Kürzel ist schon vergeben." };
     throw err;
   }
@@ -91,7 +111,14 @@ export async function renameTenant(tenantId: string, _prev: PlatformState, formD
   await requirePlatformAdmin();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name fehlt" };
-  await db.tenant.update({ where: { id: tenantId }, data: { name, isDevelopment: formData.get("isDevelopment") === "on" } });
+  const code = String(formData.get("code") ?? "").trim().padStart(2, "0");
+  if (!isValidTenantCode(code)) return { error: "ID: zweistellige Zahl von 00 bis 99" };
+  try {
+    await db.tenant.update({ where: { id: tenantId }, data: { name, code, isDevelopment: formData.get("isDevelopment") === "on" } });
+  } catch (err) {
+    if (isUniqueError(err, "code")) return { error: CODE_TAKEN };
+    throw err;
+  }
   refresh(tenantId);
   return { ok: "Gespeichert." };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hasFeature, parseFeatures, serializeFeatures } from "@/lib/features";
 import { parseLeadText } from "@/lib/lead-parser";
-import { resolveTenantId, type RouteRule } from "@/lib/lead-routing";
+import { nextFreeTenantCode, resolveTenantId, tenantCodeFromSubject, type RouteRule } from "@/lib/lead-routing";
 import { isValidSlug, slugFromPath, tenantPath } from "@/lib/tenant-paths";
 
 const rules: RouteRule[] = [
@@ -36,6 +36,36 @@ describe("resolveTenantId", () => {
       { tenantId: "high", type: "SUBJECT", pattern: "lead", priority: 5 },
     ];
     expect(resolveTenantId(prio, { subject: "Neuer Lead" })).toBe("high");
+  });
+});
+
+describe("tenantCodeFromSubject", () => {
+  const codes = ["00", "01", "02", "99"];
+
+  it("erkennt die ID in verschiedenen Schreibweisen", () => {
+    expect(tenantCodeFromSubject("01", codes)).toBe("01");
+    expect(tenantCodeFromSubject("Neuer Lead 02", codes)).toBe("02");
+    expect(tenantCodeFromSubject("Neuer Lead ID: 01", codes)).toBe("01");
+    expect(tenantCodeFromSubject("Lead #02 Facebook", codes)).toBe("02");
+    expect(tenantCodeFromSubject("[01] Neuer Lead", codes)).toBe("01");
+  });
+
+  it("ignoriert Datum, Uhrzeit, längere Zahlen und unbekannte IDs", () => {
+    expect(tenantCodeFromSubject("Lead vom 01.02.2026 um 02:01", codes)).toBeNull();
+    expect(tenantCodeFromSubject("Auftrag 1201", codes)).toBeNull();
+    expect(tenantCodeFromSubject("Neuer Lead 42", codes)).toBeNull();
+    expect(tenantCodeFromSubject(null, codes)).toBeNull();
+  });
+
+  it("bevorzugt die markierte ID vor anderen Zahlen", () => {
+    expect(tenantCodeFromSubject("01 Leads – ID 02", codes)).toBe("02");
+  });
+});
+
+describe("nextFreeTenantCode", () => {
+  it("vergibt die kleinste freie ID ab 01", () => {
+    expect(nextFreeTenantCode(["00", "99"])).toBe("01");
+    expect(nextFreeTenantCode(["00", "01", "03"])).toBe("02");
   });
 });
 
