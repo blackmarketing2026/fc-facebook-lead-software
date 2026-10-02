@@ -59,6 +59,16 @@ Mustermann"]},{"name":"phone_number","values":["+4915100000001"]}]`;
     expect(html.ok && html.lead.fullName).toBe("Jörg");
   });
 
+  it("entfernt Linkziele, die das Mailprogramm an Telefonnummer und E-Mail hängt", () => {
+    const result = parseLeadText(
+      `[{"name":"full_name","values":["Max Mustermann"]},{"name":"phone_number","values":["+491759550607 <+49%20175%209550607>"]},{"name":"email","values":["max@example.com <mailto:max@example.com>"]}]`,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lead.phone).toBe("+491759550607");
+    expect(result.lead.email).toBe("max@example.com");
+  });
+
   it("lehnt Mails ohne JSON ab", () => {
     expect(parseLeadText("Hallo, wie geht's?").ok).toBe(false);
     expect(parseLeadText("[1, 2, 3]").ok).toBe(false);

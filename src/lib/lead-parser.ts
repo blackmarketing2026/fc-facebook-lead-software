@@ -98,9 +98,15 @@ function findJsonArray(text: string): unknown[] | null {
   return extractJsonArray(text) ?? extractJsonArray(repairMailJson(text));
 }
 
-/** Mehrfache Leerzeichen (z. B. aus reparierten Umbrüchen) zusammenfassen. */
-function cleanValue(value: unknown): string {
-  return String(value).replace(/\s+/g, " ").trim();
+/**
+ * Mehrfache Leerzeichen (z. B. aus reparierten Umbrüchen) zusammenfassen und Linkziele entfernen, die
+ * Mailprogramme an erkannte Nummern/Adressen hängen: "+491751234567 <+49%20175%201234567>".
+ */
+export function cleanValue(value: unknown): string {
+  return String(value)
+    .replace(/\s*<[^\s<>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function findField(answers: ParsedAnswer[], keys: readonly string[]): string | null {

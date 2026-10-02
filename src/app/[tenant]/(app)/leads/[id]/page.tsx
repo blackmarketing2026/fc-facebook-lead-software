@@ -112,7 +112,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           <ContactButtons
             leadId={lead.id}
             telHref={lead.phone ? telHref(lead.phone) : null}
-            whatsappHref={waNumber ? `https://wa.me/${waNumber}?text=${encodeURIComponent(greeting)}` : null}
+            whatsappHref={waNumber ? `https://wa.me/${waNumber}` : null}
             mailHref={
               lead.email
                 ? `mailto:${lead.email}?subject=${encodeURIComponent("Deine Anfrage")}&body=${encodeURIComponent(
