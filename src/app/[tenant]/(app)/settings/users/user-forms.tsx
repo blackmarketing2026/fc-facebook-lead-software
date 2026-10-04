@@ -4,7 +4,7 @@ import type { Role } from "@prisma/client";
 import { useActionState, useEffect, useRef } from "react";
 import { createUser, updateUser, type SettingsState } from "@/app/actions/settings";
 
-type UserData = { id: string; email: string; displayName: string; role: Role; active: boolean };
+type UserData = { id: string; email: string; displayName: string; role: Role; active: boolean; notifyNewLeadEmail: boolean };
 
 function Feedback({ state }: { state: SettingsState }) {
   if (state?.error) return <p className="text-sm text-red-600">{state.error}</p>;
@@ -40,6 +40,10 @@ function Fields({ user, passwordRequired }: { user?: UserData; passwordRequired:
           <option value="SALES">Vertrieb</option>
           <option value="ADMIN">Admin</option>
         </select>
+      </label>
+      <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
+        <input type="checkbox" name="notifyNewLeadEmail" defaultChecked={user?.notifyNewLeadEmail} className="h-4 w-4" />
+        E-Mail bei neuem Lead (an diese Adresse, wenn dem Mitglied ein Lead zugewiesen wird – ohne Telefon und E-Mail des Leads)
       </label>
     </div>
   );

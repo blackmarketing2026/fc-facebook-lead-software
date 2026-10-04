@@ -99,6 +99,8 @@ model User {
   active          Boolean  @default(true)
   /// Darf den Plattform-Bereich nutzen und sich in alle Mandanten einloggen.
   isPlatformAdmin Boolean  @default(false)
+  /// Bekommt eine E-Mail, wenn ihm ein neuer Lead zugewiesen wird.
+  notifyNewLeadEmail Boolean @default(false)
   // Verteilung (gewichtetes Round-Robin)
   distOrder       Int      @default(0)
   distWeight      Int      @default(1)

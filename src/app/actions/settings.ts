@@ -40,6 +40,7 @@ export async function createUser(_prev: SettingsState, formData: FormData): Prom
       data: {
         ...parsed.data,
         username: await usernameFromEmail(db, admin.tenantId, parsed.data.email),
+        notifyNewLeadEmail: formData.get("notifyNewLeadEmail") === "on",
         tenantId: admin.tenantId,
         passwordHash: await bcrypt.hash(pw.data, 12),
         distOrder: (maxOrder._max.distOrder ?? 0) + 1,
@@ -78,7 +79,7 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
   if (!target) return { error: "Mitglied nicht gefunden." };
   if (await emailTaken(db, admin.tenantId, parsed.data.email, userId)) return { error: "Diese E-Mail-Adresse ist in diesem Dashboard schon vergeben." };
 
-  await db.user.update({ where: { id: userId }, data: { ...parsed.data, active, ...(passwordHash ? { passwordHash } : {}) } });
+  await db.user.update({ where: { id: userId }, data: { ...parsed.data, active, notifyNewLeadEmail: formData.get("notifyNewLeadEmail") === "on", ...(passwordHash ? { passwordHash } : {}) } });
   await resetCounters(admin.tenantId);
   revalidatePath("/[tenant]/settings", "layout");
   return { ok: password ? "Gespeichert, Passwort geändert." : "Gespeichert." };

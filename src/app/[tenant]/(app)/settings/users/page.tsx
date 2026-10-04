@@ -9,7 +9,7 @@ export default async function UsersPage() {
   const users = await db.user.findMany({
     where: { tenantId: admin.tenantId },
     orderBy: [{ role: "asc" }, { distOrder: "asc" }],
-    select: { id: true, email: true, displayName: true, role: true, active: true },
+    select: { id: true, email: true, displayName: true, role: true, active: true, notifyNewLeadEmail: true },
   });
 
   return (

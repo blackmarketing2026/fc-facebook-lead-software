@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
 import { parseBerlinLocal } from "@/lib/format";
+import { sendAssigneeLeadMail } from "@/lib/lead-notify-mail";
 import { STATUSES } from "@/lib/labels";
 import { requireAdmin, requireUser } from "@/lib/session";
 
@@ -132,7 +133,7 @@ export async function reassignLead(leadId: string, userId: string) {
   const admin = await requireAdmin();
   await getAccessibleLeadOr404(admin, leadId);
   // Nur an Vertriebler des Dashboards, zu dem der Lead gehört (wichtig für die Gesamtansicht im Hauptaccount).
-  const { tenantId } = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { tenantId: true } });
+  const { tenantId, assignedToId } = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { tenantId: true, assignedToId: true } });
   const target = await db.user.findFirst({ where: { id: userId, tenantId, active: true } });
   if (!target) throw new Error("Benutzer nicht gefunden");
 
@@ -142,5 +143,6 @@ export async function reassignLead(leadId: string, userId: string) {
     db.reminder.updateMany({ where: { leadId, done: false }, data: { userId, notifiedAt: null } }),
     db.activity.create({ data: { leadId, userId: admin.id, type: "ASSIGNED", meta: { toUserId: userId, auto: false } } }),
   ]);
+  if (assignedToId !== userId) await sendAssigneeLeadMail(leadId).catch((err) => console.error("[mail]", err));
   refreshLead();
 }
