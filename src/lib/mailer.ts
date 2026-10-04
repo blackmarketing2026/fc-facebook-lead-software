@@ -6,29 +6,27 @@ function configured(value: string | undefined): value is string {
   return Boolean(value) && !value!.startsWith("PLATZHALTER");
 }
 
-/** SMTP-Zugang; ohne eigene SMTP_*-Variablen wird das Lead-Postfach (IMAP_*) mitbenutzt – bei All-Inkl derselbe Server. */
+/** SMTP-Zugang für den Versand – ausschließlich aus den SMTP_*-Variablen. */
 function smtpConfig() {
   const env = process.env;
-  const host = configured(env.SMTP_HOST) ? env.SMTP_HOST : env.IMAP_HOST;
-  const user = configured(env.SMTP_USER) ? env.SMTP_USER : env.IMAP_USER;
-  const pass = configured(env.SMTP_PASS) ? env.SMTP_PASS : env.IMAP_PASS;
+  const user = env.SMTP_USER;
   const from = configured(env.SMTP_FROM) ? env.SMTP_FROM : user;
-  return { host, user, pass, from };
+  return { host: env.SMTP_HOST, user, pass: env.SMTP_PASS, from };
+}
+
+/** Pflicht-Variablen, die auf dem Server fehlen (für Hinweise in den Einstellungen). */
+export function missingMailerVars(): string[] {
+  return (["SMTP_HOST", "SMTP_USER", "SMTP_PASS"] as const).filter((key) => !configured(process.env[key]));
 }
 
 /** Server und Benutzer (ohne Passwort) – für Fehlermeldungen beim Test-Versand. */
 export function mailerInfo(): string {
   const { host, user } = smtpConfig();
-  const env = process.env;
-  const hostVar = configured(env.SMTP_HOST) ? "SMTP_HOST" : "IMAP_HOST";
-  const userVar = configured(env.SMTP_USER) ? "SMTP_USER" : "IMAP_USER";
-  const passVar = configured(env.SMTP_PASS) ? "SMTP_PASS" : "IMAP_PASS";
-  return `Server ${host ?? "–"} aus ${hostVar}, Benutzer ${user ?? "–"} aus ${userVar}, Passwort aus ${passVar}`;
+  return `SMTP_HOST ${host ?? "–"}, SMTP_USER ${user ?? "–"}`;
 }
 
 export function mailerConfigured(): boolean {
-  const { host, from } = smtpConfig();
-  return configured(host) && configured(from);
+  return missingMailerVars().length === 0;
 }
 
 function getTransporter(): Transporter | null {

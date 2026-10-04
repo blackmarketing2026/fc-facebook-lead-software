@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { mailerConfigured, parseEmailList } from "@/lib/mailer";
+import { missingMailerVars, parseEmailList } from "@/lib/mailer";
 import { requireAdmin } from "@/lib/session";
 import { NotifyEmailsForm, TestMailButton } from "./notification-forms";
 
@@ -9,7 +9,8 @@ export default async function NotificationsPage() {
   const admin = await requireAdmin();
   const tenant = await db.tenant.findUniqueOrThrow({ where: { id: admin.tenantId }, select: { leadNotifyEmails: true } });
   const emails = parseEmailList(tenant.leadNotifyEmails);
-  const smtp = mailerConfigured();
+  const missing = missingMailerVars();
+  const smtp = missing.length === 0;
 
   return (
     <div className="space-y-6">
@@ -23,7 +24,7 @@ export default async function NotificationsPage() {
 
       {!smtp && (
         <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
-          Der Mailversand (SMTP) ist auf dem Server noch nicht eingerichtet. Die Adressen werden gespeichert, Mails gehen
+          Der Mailversand ist auf dem Server noch nicht eingerichtet – es fehlt: {missing.join(", ")}. Die Adressen werden gespeichert, Mails gehen
           aber erst raus, sobald SMTP konfiguriert ist.
         </div>
       )}

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { buildLeadMail } from "@/lib/lead-notify-mail";
 import { processInboundMail, reprocessInbound } from "@/lib/lead-service";
-import { mailerConfigured, mailerInfo, parseEmailList, sendMail } from "@/lib/mailer";
+import { mailerConfigured, mailerInfo, missingMailerVars, parseEmailList, sendMail } from "@/lib/mailer";
 import { requireAdmin } from "@/lib/session";
 import { emailTaken, usernameFromEmail } from "@/lib/users";
 
@@ -167,7 +167,7 @@ export async function saveLeadNotifyEmails(_prev: SettingsState, formData: FormD
 /** Schickt eine Beispiel-Mail mit dem neuesten Lead (oder Testdaten) an die gespeicherten Adressen. */
 export async function sendTestLeadMail(): Promise<SettingsState> {
   const admin = await requireAdmin();
-  if (!mailerConfigured()) return { error: "SMTP ist auf dem Server noch nicht eingerichtet." };
+  if (!mailerConfigured()) return { error: `Auf dem Server fehlt: ${missingMailerVars().join(", ")}` };
   const tenant = await db.tenant.findUniqueOrThrow({ where: { id: admin.tenantId } });
   const to = parseEmailList(tenant.leadNotifyEmails);
   if (to.length === 0) return { error: "Bitte zuerst mindestens eine Adresse speichern." };
