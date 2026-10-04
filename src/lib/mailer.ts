@@ -19,7 +19,11 @@ function smtpConfig() {
 /** Server und Benutzer (ohne Passwort) – für Fehlermeldungen beim Test-Versand. */
 export function mailerInfo(): string {
   const { host, user } = smtpConfig();
-  return `Server ${host ?? "–"}, Benutzer ${user ?? "–"}`;
+  const env = process.env;
+  const hostVar = configured(env.SMTP_HOST) ? "SMTP_HOST" : "IMAP_HOST";
+  const userVar = configured(env.SMTP_USER) ? "SMTP_USER" : "IMAP_USER";
+  const passVar = configured(env.SMTP_PASS) ? "SMTP_PASS" : "IMAP_PASS";
+  return `Server ${host ?? "–"} aus ${hostVar}, Benutzer ${user ?? "–"} aus ${userVar}, Passwort aus ${passVar}`;
 }
 
 export function mailerConfigured(): boolean {
