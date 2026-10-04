@@ -6,12 +6,17 @@ function configured(value: string | undefined): value is string {
   return Boolean(value) && !value!.startsWith("PLATZHALTER");
 }
 
+/** Beim Einfügen in Vercel mitkopierte Leerzeichen und Anführungszeichen entfernen. */
+function clean(value: string | undefined): string | undefined {
+  return value?.trim().replace(/^(["'])(.*)\1$/, "$2");
+}
+
 /** SMTP-Zugang für den Versand – ausschließlich aus den SMTP_*-Variablen. */
 function smtpConfig() {
   const env = process.env;
-  const user = env.SMTP_USER;
-  const from = configured(env.SMTP_FROM) ? env.SMTP_FROM : user;
-  return { host: env.SMTP_HOST, user, pass: env.SMTP_PASS, from };
+  const user = clean(env.SMTP_USER);
+  const from = configured(env.SMTP_FROM) ? clean(env.SMTP_FROM) : user;
+  return { host: clean(env.SMTP_HOST), user, pass: clean(env.SMTP_PASS), from };
 }
 
 /** Pflicht-Variablen, die auf dem Server fehlen (für Hinweise in den Einstellungen). */
