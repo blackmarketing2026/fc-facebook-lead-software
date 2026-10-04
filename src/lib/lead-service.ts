@@ -138,12 +138,34 @@ async function createLead(
 async function notifyNewLead(tenantId: string, leadId: string, name: string | null, userId: string | null) {
   // Die Mail an die im Dashboard hinterlegten Adressen geht auch raus, wenn niemand zugewiesen wurde.
   await sendLeadNotificationMail(tenantId, leadId).catch((err) => console.error("[mail]", err));
-  if (!userId) return;
-  const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { slug: true } });
-  await sendPushToUser(userId, {
-    title: "Neuer Lead",
-    body: name ? `Neuer Lead: ${name}` : "Ein neuer Lead wurde dir zugewiesen",
-    url: tenantPath(tenant.slug, `/leads/${leadId}`),
-    tag: `lead-${leadId}`,
-  }).catch((err) => console.error("[push]", err));
+
+  // Push an den zugewiesenen Vertriebler, die Admins des Dashboards und den Hauptaccount (sieht alle Dashboards).
+  const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { slug: true, name: true } });
+  const [admins, mainAccounts] = await Promise.all([
+    db.user.findMany({ where: { tenantId, role: "ADMIN", active: true }, select: { id: true } }),
+    db.user.findMany({
+      where: { tenant: { slug: PLATFORM_TENANT_SLUG }, role: "ADMIN", isPlatformAdmin: true, active: true },
+      select: { id: true },
+    }),
+  ]);
+  const recipients = new Map<string, { url: string; body: string }>();
+  const leadName = name ?? "Unbekannt";
+  for (const u of mainAccounts) {
+    recipients.set(u.id, {
+      url: tenantPath(PLATFORM_TENANT_SLUG, `/leads/${leadId}`),
+      body: tenant.slug === PLATFORM_TENANT_SLUG ? `Neuer Lead: ${leadName}` : `Neuer Lead: ${leadName} · ${tenant.name}`,
+    });
+  }
+  for (const u of admins) recipients.set(u.id, { url: tenantPath(tenant.slug, `/leads/${leadId}`), body: `Neuer Lead: ${leadName}` });
+  if (userId) {
+    recipients.set(userId, {
+      url: tenantPath(tenant.slug, `/leads/${leadId}`),
+      body: name ? `Neuer Lead: ${name}` : "Ein neuer Lead wurde dir zugewiesen",
+    });
+  }
+  await Promise.all(
+    [...recipients].map(([id, { url, body }]) =>
+      sendPushToUser(id, { title: "Neuer Lead", body, url, tag: `lead-${leadId}` }).catch((err) => console.error("[push]", err)),
+    ),
+  );
 }
