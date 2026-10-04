@@ -1,3 +1,5 @@
+import { REMINDER_LEAD_MINUTES } from "./reminder-types";
+
 function icsDate(d: Date): string {
   return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
@@ -13,7 +15,7 @@ export type IcsEvent = {
   summary: string;
   description?: string;
   url?: string;
-  /** Text der Erinnerung 5 Minuten vorher. */
+  /** Text der Erinnerung vor dem Termin. */
   alarm?: string;
   /** Erledigte Termine bleiben im Abo sichtbar, aber als abgesagt markiert. */
   cancelled?: boolean;
@@ -36,7 +38,7 @@ function eventLines(e: IcsEvent, stamp: string): string[] {
     ...(e.cancelled ? ["STATUS:CANCELLED"] : []),
     ...(e.cancelled
       ? []
-      : ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${escapeText(e.alarm ?? e.summary)}`, "TRIGGER:-PT5M", "END:VALARM"]),
+      : ["BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${escapeText(e.alarm ?? e.summary)}`, `TRIGGER:-PT${REMINDER_LEAD_MINUTES}M`, "END:VALARM"]),
     "END:VEVENT",
   ];
 }

@@ -14,7 +14,7 @@ import {
   type FormState,
 } from "@/app/actions/leads";
 import { STATUS_LABELS, STATUSES } from "@/lib/labels";
-import { DURATION_OPTIONS, formatDuration, REMINDER_TYPE_KEYS, REMINDER_TYPES } from "@/lib/reminder-types";
+import { DURATION_OPTIONS, formatDuration, REMINDER_LEAD_MINUTES, REMINDER_TYPE_KEYS, REMINDER_TYPES } from "@/lib/reminder-types";
 
 export function StatusSelect({ leadId, status }: { leadId: string; status: LeadStatus }) {
   const [pending, start] = useTransition();
@@ -204,7 +204,7 @@ export function ReminderForm({ leadId, defaultDue }: { leadId: string; defaultDu
         Status auf „Termin“ setzen
       </label>
       {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
-      {state?.ok && <p className="text-sm text-green-700">{state.message ?? "Gespeichert."} Du wirst 5 Minuten vorher erinnert.</p>}
+      {state?.ok && <p className="text-sm text-green-700">{state.message ?? "Gespeichert."} Du wirst {REMINDER_LEAD_MINUTES} Minuten vorher erinnert.</p>}
       <button disabled={pending} className="btn-primary">
         {pending ? "Speichern …" : `${REMINDER_TYPES[type].label} planen`}
       </button>

@@ -14,6 +14,9 @@ export const REMINDER_TYPES: Record<ReminderType, { label: string; icon: string;
 
 export const REMINDER_TYPE_KEYS = Object.keys(REMINDER_TYPES) as ReminderType[];
 
+/** So viele Minuten vor einem Termin wird erinnert (Push, E-Mail, Hinweis im Dashboard, Kalender-Alarm). */
+export const REMINDER_LEAD_MINUTES = 30;
+
 export const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
 
 export function reminderLabel(type: ReminderType): string {

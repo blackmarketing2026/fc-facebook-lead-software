@@ -1,18 +1,30 @@
+import { after } from "next/server";
 import { leadScope, seesAllTenants } from "@/lib/access";
 import { db } from "@/lib/db";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatTime } from "@/lib/format";
+import { REMINDER_LEAD_MINUTES, reminderIcon, reminderLabel } from "@/lib/reminder-types";
 import { getCurrentUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
+import { checkReminders } from "@/worker/reminders";
 
 /** Neue Leads erscheinen so lange in der Glocke, bis sie bearbeitet sind – höchstens aber 7 Tage. */
 const NEW_LEAD_DAYS = 7;
+
+// Termin-Erinnerungen (Push/E-Mail) auch ohne externen Cron auslösen, solange jemand die App offen hat –
+// höchstens einmal pro Minute und Server-Instanz.
+let lastReminderCheck = 0;
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return Response.json({ error: "Nicht angemeldet" }, { status: 401 });
 
+  if (Date.now() - lastReminderCheck > 60_000) {
+    lastReminderCheck = Date.now();
+    after(() => checkReminders().catch((err) => console.error("[reminders]", err)));
+  }
+
   const now = new Date();
-  const soon = new Date(now.getTime() + 15 * 60 * 1000);
+  const soon = new Date(now.getTime() + REMINDER_LEAD_MINUTES * 60 * 1000);
   const allTenants = seesAllTenants(user);
   // Vertriebler: eigene Leads, Admin: alle des Dashboards, Hauptaccount: alle Dashboards.
   const newLeadWhere = {
@@ -40,14 +52,17 @@ export async function GET() {
     ...reminders.map((r) => ({
       id: r.id,
       kind: "reminder" as const,
-      title: `Rückruf: ${r.lead.fullName ?? "Lead"}`,
-      subtitle: `${r.dueAt < now ? "Überfällig seit" : "Fällig um"} ${formatDateTime(r.dueAt)}`,
+      icon: reminderIcon(r.type),
+      title: `${reminderLabel(r.type)}: ${r.lead.fullName ?? "Lead"}`,
+      subtitle: r.dueAt < now ? `Überfällig seit ${formatDateTime(r.dueAt)}` : `Um ${formatTime(r.dueAt)} Uhr`,
       href: tenantPath(user.tenant.slug, `/leads/${r.lead.id}`),
       overdue: r.dueAt < now,
+      dueAt: r.dueAt.toISOString(),
     })),
     ...newLeads.map((l) => ({
       id: l.id,
       kind: "lead" as const,
+      icon: "✨",
       title: `Neuer Lead: ${l.fullName ?? "Unbekannt"}`,
       subtitle: `${allTenants ? `${l.tenant.name} · ` : ""}Eingang ${formatDateTime(l.receivedAt)}`,
       href: tenantPath(user.tenant.slug, `/leads/${l.id}`),

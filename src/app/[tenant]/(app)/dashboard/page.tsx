@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
+import { leadScope } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime, parseBerlinLocal, TIMEZONE } from "@/lib/format";
 import { googleCalendarUrl } from "@/lib/ics";
 import { STATUS_LABELS, STATUSES } from "@/lib/labels";
 import { reminderEvent } from "@/lib/reminder-calendar";
-import { reminderIcon, reminderLabel } from "@/lib/reminder-types";
+import { REMINDER_LEAD_MINUTES, reminderIcon, reminderLabel } from "@/lib/reminder-types";
 import { requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
 import { ReminderActions } from "../leads/[id]/lead-controls";
@@ -23,13 +24,19 @@ export default async function DashboardPage() {
   const now = new Date();
   const todayStart = startOfBerlinDay(0);
   const tomorrowStart = startOfBerlinDay(1);
+  const soon = new Date(now.getTime() + REMINDER_LEAD_MINUTES * 60 * 1000);
+  const isAdmin = user.role === "ADMIN";
 
   const [reminders, newLeads] = await Promise.all([
     db.reminder.findMany({
-      where: { userId: user.id, done: false, lead: { tenantId: user.tenantId } },
+      // Vertriebler: eigene Termine. Admin: alle offenen Termine des Dashboards (Hauptaccount: aller Dashboards).
+      where: { done: false, ...(isAdmin ? { lead: leadScope(user) } : { userId: user.id, lead: { tenantId: user.tenantId } }) },
       orderBy: { dueAt: "asc" },
       take: 30,
-      include: { lead: { select: { id: true, fullName: true, phone: true, email: true, status: true } } },
+      include: {
+        lead: { select: { id: true, fullName: true, phone: true, email: true, status: true } },
+        user: { select: { displayName: true } },
+      },
     }),
     db.lead.findMany({
       where: { tenantId: user.tenantId, assignedToId: user.id, status: "NEU" },
@@ -45,20 +52,35 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card p-5">
-          <h2 className="mb-1 font-semibold">📅 Als Nächstes</h2>
-          <p className="mb-4 text-sm text-slate-500">Deine geplanten Termine und Aufgaben, der dringendste zuerst.</p>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <h2 className="font-semibold">📅 Die nächsten Termine</h2>
+            <Link href={tenantPath(slug, "/calendar")} className="text-sm text-blue-700 hover:underline">
+              Kalender →
+            </Link>
+          </div>
+          <p className="mb-4 text-sm text-slate-500">
+            {isAdmin ? "Alle offenen Termine und Aufgaben im Dashboard" : "Deine Termine und Aufgaben"}, chronologisch. Du wirst{" "}
+            {REMINDER_LEAD_MINUTES} Minuten vorher erinnert.
+          </p>
           {reminders.length === 0 ? (
             <p className="py-6 text-center text-sm text-slate-500">Keine offenen Termine.</p>
           ) : (
             <ul className="space-y-2">
               {reminders.map((r) => {
                 const overdue = r.dueAt < now;
+                const imminent = !overdue && r.dueAt <= soon;
                 const today = !overdue && r.dueAt < tomorrowStart;
                 return (
                   <li
                     key={r.id}
                     className={`rounded-lg border p-3 ${
-                      overdue ? "border-red-200 bg-red-50" : today ? "border-amber-200 bg-amber-50" : "border-slate-200"
+                      overdue
+                        ? "border-red-200 bg-red-50"
+                        : imminent
+                          ? "border-amber-400 bg-amber-50 ring-2 ring-amber-200"
+                          : today
+                            ? "border-amber-200 bg-amber-50"
+                            : "border-slate-200"
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -66,7 +88,7 @@ export default async function DashboardPage() {
                         {r.lead.fullName ?? "Lead"}
                       </Link>
                       <span className={`text-xs font-medium ${overdue ? "text-red-700" : today ? "text-amber-800" : "text-slate-500"}`}>
-                        {overdue ? "Überfällig · " : today ? "Heute · " : ""}
+                        {overdue ? "Überfällig · " : imminent ? "⏰ Gleich · " : today ? "Heute · " : ""}
                         {formatDateTime(r.dueAt)}
                       </span>
                     </div>
@@ -74,6 +96,7 @@ export default async function DashboardPage() {
                       {reminderIcon(r.type)} {reminderLabel(r.type)}
                       {r.title !== reminderLabel(r.type) && ` · ${r.title}`}
                       {r.comment && ` – ${r.comment}`}
+                      {isAdmin && <span className="text-slate-400"> · {r.user.displayName}</span>}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                       {r.lead.phone ? (

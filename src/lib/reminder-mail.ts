@@ -1,9 +1,9 @@
 import { db } from "./db";
-import { formatDateTime, telHref } from "./format";
+import { formatDateTime, formatTime, telHref } from "./format";
 import { buildIcs, googleCalendarUrl } from "./ics";
 import { escapeHtml, sendMail } from "./mailer";
 import { REMINDER_CALENDAR_SELECT, reminderEvent, type ReminderForCalendar } from "./reminder-calendar";
-import { formatDuration, reminderIcon, reminderLabel } from "./reminder-types";
+import { formatDuration, REMINDER_LEAD_MINUTES, reminderIcon, reminderLabel } from "./reminder-types";
 import { absoluteUrl } from "./lead-notify-mail";
 import { PLATFORM_TENANT_SLUG, PRODUCT_NAME, tenantPath } from "./tenant-paths";
 
@@ -11,14 +11,20 @@ import { PLATFORM_TENANT_SLUG, PRODUCT_NAME, tenantPath } from "./tenant-paths";
 export function buildReminderMail(
   r: ReminderForCalendar,
   tenant: { slug: string; name: string },
-  opts: { ownerName: string; createdBy: string | null },
+  opts: { ownerName: string; createdBy: string | null; due?: boolean },
 ) {
   const dashboardName = tenant.slug === PLATFORM_TENANT_SLUG ? PRODUCT_NAME : tenant.name;
   const event = reminderEvent(r, tenant.slug);
   const label = reminderLabel(r.type);
   const name = r.lead.fullName ?? "Lead";
   const when = formatDateTime(r.dueAt);
-  const subject = `Neuer Termin: ${label} mit ${name} – ${when}`;
+  // due: Erinnerung kurz vor dem Termin statt Mail beim Anlegen.
+  const subject = opts.due
+    ? `In ${REMINDER_LEAD_MINUTES} Minuten: ${label} mit ${name} – ${formatTime(r.dueAt)} Uhr`
+    : `Neuer Termin: ${label} mit ${name} – ${when}`;
+  const intro = opts.due
+    ? `in ${REMINDER_LEAD_MINUTES} Minuten steht ein Termin an – bitte den Lead kontaktieren (${dashboardName}):`
+    : `für dich wurde ein neuer Termin angelegt (${dashboardName}):`;
   const googleUrl = googleCalendarUrl(event);
   const calendarPage = absoluteUrl(tenantPath(tenant.slug, "/calendar"));
 
@@ -36,7 +42,7 @@ export function buildReminderMail(
   const text = [
     `Hallo ${opts.ownerName},`,
     "",
-    `für dich wurde ein neuer Termin angelegt (${dashboardName}):`,
+    intro,
     "",
     ...rows.map(([k, v]) => `${k}: ${v}`),
     "",
@@ -54,7 +60,7 @@ export function buildReminderMail(
   <div style="max-width:520px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px">
     <p style="margin:0 0 4px;font-size:13px;color:#64748b">${escapeHtml(dashboardName)}</p>
     <h1 style="margin:0 0 4px;font-size:20px">${escapeHtml(`${reminderIcon(r.type)} ${label} mit ${name}`)}</h1>
-    <p style="margin:0 0 16px;font-size:15px;color:#334155">${escapeHtml(when)} Uhr</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#334155">${escapeHtml(when)} Uhr${opts.due ? ` · <strong>in ${REMINDER_LEAD_MINUTES} Minuten</strong>` : ""}</p>
     <table style="width:100%;border-collapse:collapse;font-size:14px">
       ${rows
         .map(
@@ -84,8 +90,11 @@ export function buildReminderMail(
   };
 }
 
-/** Schickt die Termin-Mail an den Vertriebler, dem der Termin gehört. Gibt dessen Namen zurück (oder null). */
-export async function sendReminderMail(reminderId: string, createdBy: string | null): Promise<string | null> {
+/**
+ * Schickt die Termin-Mail an den Vertriebler, dem der Termin gehört. Gibt dessen Namen zurück (oder null).
+ * due: Erinnerung kurz vor dem Termin.
+ */
+export async function sendReminderMail(reminderId: string, createdBy: string | null, due = false): Promise<string | null> {
   const r = await db.reminder.findUniqueOrThrow({
     where: { id: reminderId },
     select: {
@@ -95,7 +104,7 @@ export async function sendReminderMail(reminderId: string, createdBy: string | n
     },
   });
   if (!r.user.active || !r.user.email) return null;
-  const mail = buildReminderMail(r, r.lead.tenant, { ownerName: r.user.displayName, createdBy });
+  const mail = buildReminderMail(r, r.lead.tenant, { ownerName: r.user.displayName, createdBy, due });
   const sent = await sendMail({ to: [r.user.email], ...mail });
   return sent ? r.user.displayName : null;
 }
