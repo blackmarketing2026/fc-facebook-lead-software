@@ -16,6 +16,12 @@ function smtpConfig() {
   return { host, user, pass, from };
 }
 
+/** Server und Benutzer (ohne Passwort) – für Fehlermeldungen beim Test-Versand. */
+export function mailerInfo(): string {
+  const { host, user } = smtpConfig();
+  return `Server ${host ?? "–"}, Benutzer ${user ?? "–"}`;
+}
+
 export function mailerConfigured(): boolean {
   const { host, from } = smtpConfig();
   return configured(host) && configured(from);

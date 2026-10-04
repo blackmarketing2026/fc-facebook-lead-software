@@ -7,7 +7,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { buildLeadMail } from "@/lib/lead-notify-mail";
 import { processInboundMail, reprocessInbound } from "@/lib/lead-service";
-import { mailerConfigured, parseEmailList, sendMail } from "@/lib/mailer";
+import { mailerConfigured, mailerInfo, parseEmailList, sendMail } from "@/lib/mailer";
 import { requireAdmin } from "@/lib/session";
 import { emailTaken, usernameFromEmail } from "@/lib/users";
 
@@ -183,7 +183,7 @@ export async function sendTestLeadMail(): Promise<SettingsState> {
   try {
     await sendMail({ to, ...mail, subject: `[Test] ${mail.subject}` });
   } catch (err) {
-    return { error: `Versand fehlgeschlagen: ${(err as Error).message}` };
+    return { error: `Versand fehlgeschlagen (${mailerInfo()}): ${(err as Error).message}` };
   }
   return { ok: `Test-Mail an ${to.join(", ")} verschickt.` };
 }
