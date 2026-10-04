@@ -93,7 +93,7 @@ async function resetCounters(tenantId: string) {
 const distributionSchema = z.array(
   z.object({
     id: z.string(),
-    weight: z.number().int().min(1).max(10),
+    weight: z.number().int().min(0).max(100),
     paused: z.boolean(),
   }),
 );

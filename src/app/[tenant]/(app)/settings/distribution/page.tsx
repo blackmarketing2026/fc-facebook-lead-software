@@ -17,9 +17,11 @@ export default async function DistributionPage() {
       <div>
         <h1 className="text-2xl font-semibold">Lead-Verteilung</h1>
         <p className="max-w-3xl text-sm text-slate-500">
-          Neue Leads werden automatisch per gewichtetem Round-Robin verteilt. Die <strong>Reihenfolge</strong> bestimmt,
-          wer zuerst dran ist, das <strong>Gewicht</strong> die Häufigkeit: Gewicht 2 bekommt doppelt so viele Leads wie
-          Gewicht 1. Pausierte oder deaktivierte Vertriebler (z. B. im Urlaub) werden übersprungen.
+          Neue Leads werden automatisch und gleichmäßig gestreut verteilt. Der <strong>Anteil</strong> legt fest, wie viel
+          Prozent der Leads jemand bekommt – verschiebst du einen Regler, gleichen die anderen automatisch aus, die Summe
+          bleibt immer 100 %. Mit dem Schloss hältst du einen Anteil fest. Die <strong>Reihenfolge</strong> bestimmt, wer
+          zuerst dran ist. Pausierte oder deaktivierte Vertriebler (z. B. im Urlaub) werden übersprungen, ihr Anteil
+          geht an die anderen.
         </p>
       </div>
       <DistributionEditor users={users} />
