@@ -6,8 +6,6 @@ import { PLATFORM_TENANT_SLUG, PRODUCT_NAME, tenantPath } from "./tenant-paths";
 export type LeadMailData = {
   id: string;
   fullName: string | null;
-  email: string | null;
-  phone: string | null;
   receivedAt: Date;
   assignedTo: string | null;
 };
@@ -26,9 +24,8 @@ export function buildLeadMail(tenant: { slug: string; name: string }, lead: Lead
   const dashboardUrl = absoluteUrl(tenantPath(tenant.slug, "/dashboard"));
   const name = lead.fullName || "Unbekannt";
   const rows: [string, string][] = [
+    // Kontaktdaten bewusst nicht in der Mail – die stehen nur im Dashboard.
     ["Name", name],
-    ["Telefon", lead.phone || "–"],
-    ["E-Mail", lead.email || "–"],
     ["Eingang", formatDateTime(lead.receivedAt)],
     ["Zugewiesen an", lead.assignedTo || "Niemand (kein aktiver Vertriebler)"],
   ];
@@ -75,7 +72,7 @@ export async function sendLeadNotificationMail(tenantId: string, leadId: string)
   if (to.length === 0) return;
   const lead = await db.lead.findUniqueOrThrow({
     where: { id: leadId },
-    select: { id: true, fullName: true, email: true, phone: true, receivedAt: true, assignedTo: { select: { displayName: true } } },
+    select: { id: true, fullName: true, receivedAt: true, assignedTo: { select: { displayName: true } } },
   });
   const mail = buildLeadMail(tenant, { ...lead, assignedTo: lead.assignedTo?.displayName ?? null });
   await sendMail({ to, ...mail });

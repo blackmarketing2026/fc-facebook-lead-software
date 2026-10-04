@@ -174,11 +174,11 @@ export async function sendTestLeadMail(): Promise<SettingsState> {
   const latest = await db.lead.findFirst({
     where: { tenantId: tenant.id },
     orderBy: { createdAt: "desc" },
-    select: { id: true, fullName: true, email: true, phone: true, receivedAt: true, assignedTo: { select: { displayName: true } } },
+    select: { id: true, fullName: true, receivedAt: true, assignedTo: { select: { displayName: true } } },
   });
   const lead = latest
     ? { ...latest, assignedTo: latest.assignedTo?.displayName ?? null }
-    : { id: "beispiel", fullName: "Max Mustermann", email: "max@example.com", phone: "+491701234567", receivedAt: new Date(), assignedTo: null };
+    : { id: "beispiel", fullName: "Max Mustermann", receivedAt: new Date(), assignedTo: null };
   const mail = buildLeadMail(tenant, lead);
   try {
     await sendMail({ to, ...mail, subject: `[Test] ${mail.subject}` });

@@ -17,8 +17,8 @@ export default async function NotificationsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Benachrichtigungen</h1>
         <p className="text-sm text-slate-500">
-          Bei jedem neuen Lead in diesem Dashboard geht eine E-Mail mit Name, Telefon, E-Mail und einem Link direkt zum
-          Lead-Profil raus.
+          Bei jedem neuen Lead in diesem Dashboard geht eine E-Mail mit dem Namen des Leads und einem Link direkt zum
+          Lead-Profil raus. Kontaktdaten stehen nicht in der Mail, nur im Dashboard.
         </p>
       </div>
 
