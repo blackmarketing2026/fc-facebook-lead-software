@@ -6,8 +6,19 @@ function configured(value: string | undefined): value is string {
   return Boolean(value) && !value!.startsWith("PLATZHALTER");
 }
 
+/** SMTP-Zugang; ohne eigene SMTP_*-Variablen wird das Lead-Postfach (IMAP_*) mitbenutzt – bei All-Inkl derselbe Server. */
+function smtpConfig() {
+  const env = process.env;
+  const host = configured(env.SMTP_HOST) ? env.SMTP_HOST : env.IMAP_HOST;
+  const user = configured(env.SMTP_USER) ? env.SMTP_USER : env.IMAP_USER;
+  const pass = configured(env.SMTP_PASS) ? env.SMTP_PASS : env.IMAP_PASS;
+  const from = configured(env.SMTP_FROM) ? env.SMTP_FROM : user;
+  return { host, user, pass, from };
+}
+
 export function mailerConfigured(): boolean {
-  return configured(process.env.SMTP_HOST) && configured(process.env.SMTP_FROM);
+  const { host, from } = smtpConfig();
+  return configured(host) && configured(from);
 }
 
 function getTransporter(): Transporter | null {
@@ -17,12 +28,12 @@ function getTransporter(): Transporter | null {
     transporter = null;
     return null;
   }
-  const user = process.env.SMTP_USER;
+  const { host, user, pass } = smtpConfig();
   transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
+    host,
     port: Number(process.env.SMTP_PORT || 465),
     secure: process.env.SMTP_SECURE !== "false",
-    auth: configured(user) ? { user, pass: process.env.SMTP_PASS ?? "" } : undefined,
+    auth: configured(user) ? { user, pass: pass ?? "" } : undefined,
   });
   return transporter;
 }
@@ -33,7 +44,7 @@ export type Mail = { to: string[]; subject: string; text: string; html: string }
 export async function sendMail(mail: Mail): Promise<boolean> {
   const t = getTransporter();
   if (!t || mail.to.length === 0) return false;
-  await t.sendMail({ from: process.env.SMTP_FROM, ...mail });
+  await t.sendMail({ from: smtpConfig().from, ...mail });
   return true;
 }
 
