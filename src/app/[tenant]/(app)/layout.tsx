@@ -23,6 +23,7 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
           { href: t("/settings/users"), label: "Mitglieder" },
           { href: t("/settings/distribution"), label: "Verteilung" },
           { href: t("/settings/mailbox"), label: "Postfach" },
+          { href: t("/settings/notifications"), label: "Benachrichtigungen" },
           { href: t("/log"), label: "Log" },
         ]
       : []),

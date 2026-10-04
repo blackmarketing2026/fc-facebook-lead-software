@@ -20,7 +20,7 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
       leadRoutes: { orderBy: [{ priority: "desc" }, { createdAt: "asc" }] },
       users: {
         orderBy: [{ role: "asc" }, { displayName: "asc" }],
-        select: { id: true, displayName: true, username: true, email: true, role: true, active: true },
+        select: { id: true, displayName: true, email: true, role: true, active: true },
       },
       _count: { select: { leads: true } },
     },
@@ -125,7 +125,6 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
           {tenant.users.map((u) => (
             <li key={u.id} className="flex flex-wrap items-center gap-3 py-2">
               <span className="font-medium">{u.displayName}</span>
-              <span className="text-slate-500">@{u.username}</span>
               <span className={`badge ${u.role === "ADMIN" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}>
                 {u.role === "ADMIN" ? "Admin" : "Vertrieb"}
               </span>

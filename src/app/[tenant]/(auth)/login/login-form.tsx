@@ -8,8 +8,8 @@ export function LoginForm() {
   return (
     <form action={action} className="mt-6 space-y-4">
       <label className="block">
-        <span className="label">Benutzername oder E-Mail</span>
-        <input name="username" autoComplete="username" required className="input" autoFocus />
+        <span className="label">E-Mail</span>
+        <input name="email" inputMode="email" autoComplete="username" required className="input" autoFocus />
       </label>
       <label className="block">
         <span className="label">Passwort</span>

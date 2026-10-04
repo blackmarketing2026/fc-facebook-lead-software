@@ -1,0 +1,44 @@
+import { db } from "@/lib/db";
+import { mailerConfigured, parseEmailList } from "@/lib/mailer";
+import { requireAdmin } from "@/lib/session";
+import { NotifyEmailsForm, TestMailButton } from "./notification-forms";
+
+export const metadata = { title: "Benachrichtigungen" };
+
+export default async function NotificationsPage() {
+  const admin = await requireAdmin();
+  const tenant = await db.tenant.findUniqueOrThrow({ where: { id: admin.tenantId }, select: { leadNotifyEmails: true } });
+  const emails = parseEmailList(tenant.leadNotifyEmails);
+  const smtp = mailerConfigured();
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Benachrichtigungen</h1>
+        <p className="text-sm text-slate-500">
+          Bei jedem neuen Lead in diesem Dashboard geht eine E-Mail mit Name, Telefon, E-Mail und einem Link direkt zum
+          Lead-Profil raus.
+        </p>
+      </div>
+
+      {!smtp && (
+        <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
+          Der Mailversand (SMTP) ist auf dem Server noch nicht eingerichtet. Die Adressen werden gespeichert, Mails gehen
+          aber erst raus, sobald SMTP konfiguriert ist.
+        </div>
+      )}
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">E-Mail bei neuem Lead</h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Eine oder mehrere Adressen, getrennt durch Komma oder Zeilenumbruch. Leer lassen, um die Benachrichtigung
+          auszuschalten.
+        </p>
+        <NotifyEmailsForm initial={emails.join("\n")} />
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <TestMailButton disabled={!smtp || emails.length === 0} />
+        </div>
+      </section>
+    </div>
+  );
+}

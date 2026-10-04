@@ -9,7 +9,7 @@ export default async function UsersPage() {
   const users = await db.user.findMany({
     where: { tenantId: admin.tenantId },
     orderBy: [{ role: "asc" }, { distOrder: "asc" }],
-    select: { id: true, username: true, email: true, displayName: true, role: true, active: true },
+    select: { id: true, email: true, displayName: true, role: true, active: true },
   });
 
   return (
@@ -26,7 +26,6 @@ export default async function UsersPage() {
           <details key={u.id} className="card group">
             <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 p-4">
               <span className="font-medium">{u.displayName}</span>
-              <span className="text-sm text-slate-500">@{u.username}</span>
               <span className={`badge ${u.role === "ADMIN" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}>
                 {u.role === "ADMIN" ? "Admin" : "Vertrieb"}
               </span>

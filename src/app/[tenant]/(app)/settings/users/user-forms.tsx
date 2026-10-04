@@ -4,7 +4,7 @@ import type { Role } from "@prisma/client";
 import { useActionState, useEffect, useRef } from "react";
 import { createUser, updateUser, type SettingsState } from "@/app/actions/settings";
 
-type UserData = { id: string; username: string; email: string; displayName: string; role: Role; active: boolean };
+type UserData = { id: string; email: string; displayName: string; role: Role; active: boolean };
 
 function Feedback({ state }: { state: SettingsState }) {
   if (state?.error) return <p className="text-sm text-red-600">{state.error}</p>;
@@ -14,18 +14,14 @@ function Feedback({ state }: { state: SettingsState }) {
 
 function Fields({ user, passwordRequired }: { user?: UserData; passwordRequired: boolean }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       <label className="block">
         <span className="label">Anzeigename</span>
         <input name="displayName" required defaultValue={user?.displayName} className="input" placeholder="Martin" />
       </label>
       <label className="block">
-        <span className="label">Benutzername</span>
-        <input name="username" required defaultValue={user?.username} className="input" placeholder="martin" autoComplete="off" />
-      </label>
-      <label className="block">
-        <span className="label">E-Mail</span>
-        <input name="email" type="email" required defaultValue={user?.email} className="input" />
+        <span className="label">E-Mail (Login)</span>
+        <input name="email" type="email" required defaultValue={user?.email} className="input" autoComplete="off" />
       </label>
       <label className="block">
         <span className="label">{passwordRequired ? "Passwort" : "Neues Passwort (leer = unverändert)"}</span>

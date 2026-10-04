@@ -10,6 +10,7 @@ import { FEATURE_KEYS, parseFeatures, serializeFeatures } from "@/lib/features";
 import { isValidTenantCode, nextFreeTenantCode } from "@/lib/lead-routing";
 import { createSession, requirePlatformAdmin } from "@/lib/session";
 import { isValidSlug, PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
+import { emailTaken, usernameFromEmail } from "@/lib/users";
 
 export type PlatformState = { error?: string; ok?: string } | undefined;
 
@@ -45,12 +46,7 @@ function refresh(tenantId?: string) {
 
 const adminSchema = z.object({
   adminDisplayName: z.string().trim().min(1, "Name des Admins fehlt").max(60),
-  adminUsername: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^[a-z0-9._-]{3,32}$/, "Benutzername: 3–32 Zeichen, nur a–z, 0–9, Punkt, Minus, Unterstrich"),
-  adminEmail: z.email("Ungültige E-Mail-Adresse des Admins"),
+  adminEmail: z.string().trim().toLowerCase().pipe(z.email("Ungültige E-Mail-Adresse des Admins")),
   adminPassword: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben"),
 });
 
@@ -86,7 +82,8 @@ export async function createTenant(_prev: PlatformState, formData: FormData): Pr
         ...(admin?.success && {
           users: {
             create: {
-              username: admin.data.adminUsername,
+              // Neues Dashboard ist leer – der aus der E-Mail erzeugte Name ist dort immer frei.
+              username: await usernameFromEmail(db, "", admin.data.adminEmail),
               displayName: admin.data.adminDisplayName,
               email: admin.data.adminEmail,
               role: "ADMIN",
@@ -170,11 +167,12 @@ export async function addTenantAdmin(tenantId: string, _prev: PlatformState, for
   await requirePlatformAdmin();
   const admin = adminSchema.safeParse(Object.fromEntries(formData));
   if (!admin.success) return { error: firstError(admin.error) };
+  if (await emailTaken(db, tenantId, admin.data.adminEmail)) return { error: "Diese E-Mail-Adresse ist in diesem Dashboard schon vergeben." };
   try {
     await db.user.create({
       data: {
         tenantId,
-        username: admin.data.adminUsername,
+        username: await usernameFromEmail(db, tenantId, admin.data.adminEmail),
         displayName: admin.data.adminDisplayName,
         email: admin.data.adminEmail,
         role: "ADMIN",
@@ -182,7 +180,7 @@ export async function addTenantAdmin(tenantId: string, _prev: PlatformState, for
       },
     });
   } catch (err) {
-    if (isUniqueError(err)) return { error: "Dieser Benutzername ist in diesem Dashboard schon vergeben." };
+    if (isUniqueError(err)) return { error: "Admin konnte nicht angelegt werden, bitte erneut versuchen." };
     throw err;
   }
   refresh(tenantId);

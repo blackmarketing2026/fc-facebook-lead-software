@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { GlobalLoader } from "@/components/global-loader";
 import { displayName, getTenant } from "@/lib/tenant";
 import "./globals.css";
 
@@ -24,7 +25,10 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="de" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full font-sans">{children}</body>
+      <body className="min-h-full font-sans">
+        {children}
+        <GlobalLoader />
+      </body>
     </html>
   );
 }

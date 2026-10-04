@@ -34,12 +34,8 @@ function AdminFields() {
         <input name="adminDisplayName" required className="input" placeholder="Martin Mustermann" />
       </label>
       <label className="block">
-        <span className="label">Benutzername</span>
-        <input name="adminUsername" required className="input" placeholder="martin" autoComplete="off" />
-      </label>
-      <label className="block">
-        <span className="label">E-Mail</span>
-        <input name="adminEmail" type="email" required className="input" />
+        <span className="label">E-Mail (Login)</span>
+        <input name="adminEmail" type="email" required className="input" autoComplete="off" />
       </label>
       <label className="block">
         <span className="label">Startpasswort</span>
@@ -85,7 +81,7 @@ export function CreateTenantForm() {
         </p>
       </div>
       {withAdmin && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-3">
           <AdminFields />
         </div>
       )}
@@ -155,7 +151,7 @@ export function AddAdminForm({ tenantId }: { tenantId: string }) {
   const ref = useResetOnOk(state);
   return (
     <form ref={ref} action={action} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-3">
         <AdminFields />
       </div>
       <Feedback state={state} />

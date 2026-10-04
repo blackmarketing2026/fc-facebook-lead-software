@@ -62,6 +62,8 @@ model Tenant {
   isDevelopment Boolean      @default(false)
   /// Freigeschaltete Feature-Schlüssel, kommagetrennt (siehe src/lib/features.ts).
   features      String       @default("") @db.VarChar(1000)
+  /// E-Mail-Adressen (kommagetrennt), die bei jedem neuen Lead benachrichtigt werden.
+  leadNotifyEmails String    @default("") @db.VarChar(1000)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

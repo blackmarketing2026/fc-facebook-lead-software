@@ -1,0 +1,79 @@
+import { db } from "./db";
+import { formatDateTime } from "./format";
+import { escapeHtml, parseEmailList, sendMail } from "./mailer";
+import { PLATFORM_TENANT_SLUG, PRODUCT_NAME, tenantPath } from "./tenant-paths";
+
+export type LeadMailData = {
+  id: string;
+  fullName: string | null;
+  email: string | null;
+  phone: string | null;
+  receivedAt: Date;
+  assignedTo: string | null;
+};
+
+function absoluteUrl(path: string) {
+  return `${(process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "")}${path}`;
+}
+
+export function buildLeadMail(tenant: { slug: string; name: string }, lead: LeadMailData) {
+  // Wie displayName() aus tenant.ts – das ist "server-only" und läuft nicht im Worker.
+  const dashboardName = tenant.slug === PLATFORM_TENANT_SLUG ? PRODUCT_NAME : tenant.name;
+  const leadUrl = absoluteUrl(tenantPath(tenant.slug, `/leads/${lead.id}`));
+  const dashboardUrl = absoluteUrl(tenantPath(tenant.slug, "/dashboard"));
+  const name = lead.fullName || "Unbekannt";
+  const rows: [string, string][] = [
+    ["Name", name],
+    ["Telefon", lead.phone || "–"],
+    ["E-Mail", lead.email || "–"],
+    ["Eingang", formatDateTime(lead.receivedAt)],
+    ["Zugewiesen an", lead.assignedTo || "Niemand (kein aktiver Vertriebler)"],
+  ];
+
+  const text = [
+    `Neuer Lead in ${dashboardName}`,
+    "",
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    "",
+    `Lead-Profil öffnen: ${leadUrl}`,
+    `Zum Dashboard: ${dashboardUrl}`,
+  ].join("\n");
+
+  const html = `<!doctype html>
+<html lang="de"><body style="margin:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+  <div style="max-width:520px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px">
+    <p style="margin:0 0 4px;font-size:13px;color:#64748b">${escapeHtml(dashboardName)}</p>
+    <h1 style="margin:0 0 16px;font-size:20px">Neuer Lead: ${escapeHtml(name)}</h1>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      ${rows
+        .map(
+          ([k, v]) =>
+            `<tr><td style="padding:6px 0;color:#64748b;width:130px">${escapeHtml(k)}</td><td style="padding:6px 0">${escapeHtml(v)}</td></tr>`,
+        )
+        .join("")}
+    </table>
+    <p style="margin:24px 0 8px">
+      <a href="${escapeHtml(leadUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;font-weight:bold;font-size:14px">Lead-Profil öffnen</a>
+    </p>
+    <p style="margin:0;font-size:13px"><a href="${escapeHtml(dashboardUrl)}" style="color:#2563eb">Zum Dashboard</a></p>
+  </div>
+</body></html>`;
+
+  return { subject: `Neuer Lead: ${name}`, text, html };
+}
+
+/** Schickt die "Neuer Lead"-Mail an alle Adressen, die im Dashboard hinterlegt sind. */
+export async function sendLeadNotificationMail(tenantId: string, leadId: string): Promise<void> {
+  const tenant = await db.tenant.findUniqueOrThrow({
+    where: { id: tenantId },
+    select: { slug: true, name: true, leadNotifyEmails: true },
+  });
+  const to = parseEmailList(tenant.leadNotifyEmails);
+  if (to.length === 0) return;
+  const lead = await db.lead.findUniqueOrThrow({
+    where: { id: leadId },
+    select: { id: true, fullName: true, email: true, phone: true, receivedAt: true, assignedTo: { select: { displayName: true } } },
+  });
+  const mail = buildLeadMail(tenant, { ...lead, assignedTo: lead.assignedTo?.displayName ?? null });
+  await sendMail({ to, ...mail });
+}
