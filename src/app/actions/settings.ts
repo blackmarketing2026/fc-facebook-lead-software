@@ -5,10 +5,13 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { buildLeadMail } from "@/lib/lead-notify-mail";
+import { assignNextSalesUser } from "@/lib/distribution";
+import { buildLeadMail, sendAssigneeLeadMail } from "@/lib/lead-notify-mail";
 import { processInboundMail, reprocessInbound } from "@/lib/lead-service";
 import { mailerConfigured, mailerInfo, missingMailerVars, parseEmailList, sendMail } from "@/lib/mailer";
+import { sendPushToUser } from "@/lib/push";
 import { requireAdmin } from "@/lib/session";
+import { tenantPath } from "@/lib/tenant-paths";
 import { emailTaken, usernameFromEmail } from "@/lib/users";
 
 export type SettingsState = { error?: string; ok?: string } | undefined;
@@ -187,4 +190,67 @@ export async function sendTestLeadMail(): Promise<SettingsState> {
     return { error: `Versand fehlgeschlagen (${mailerInfo()}): ${(err as Error).message}` };
   }
   return { ok: `Test-Mail an ${to.join(", ")} verschickt.` };
+}
+
+export type DistributionTestState =
+  | { ok: true; assignedTo: string; auto: boolean; mail: string; mailSent: boolean; push: number; leadHref: string }
+  | { ok: false; error: string }
+  | undefined;
+
+/**
+ * Verteilungstest: weist einen vorhandenen Lead neu zu – automatisch laut Verteilung (wie ein neuer Lead)
+ * oder an einen gewählten Vertriebler – und schickt Mail und Push genau wie im Echtbetrieb.
+ */
+export async function testDistribution(_prev: DistributionTestState, formData: FormData): Promise<DistributionTestState> {
+  const admin = await requireAdmin();
+  const leadId = String(formData.get("leadId") ?? "");
+  const target = String(formData.get("target") ?? "auto");
+  const lead = await db.lead.findFirst({ where: { id: leadId, tenantId: admin.tenantId }, select: { id: true, fullName: true } });
+  if (!lead) return { ok: false, error: "Bitte einen Lead auswählen." };
+
+  const auto = target === "auto";
+  const assignedToId = await db.$transaction(async (tx) => {
+    const userId = auto
+      ? await assignNextSalesUser(tx, admin.tenantId)
+      : (await tx.user.findFirst({ where: { id: target, tenantId: admin.tenantId, role: "SALES", active: true }, select: { id: true } }))?.id ?? null;
+    if (!userId) return null;
+    await tx.lead.update({ where: { id: lead.id }, data: { assignedToId: userId } });
+    await tx.reminder.updateMany({ where: { leadId: lead.id, done: false }, data: { userId, notifiedAt: null } });
+    await tx.activity.create({
+      data: { leadId: lead.id, userId: admin.id, type: "ASSIGNED", meta: { toUserId: userId, auto, test: true } },
+    });
+    return userId;
+  });
+  if (!assignedToId) {
+    return { ok: false, error: auto ? "Kein aktiver, nicht pausierter Vertriebler in der Verteilung." : "Vertriebler nicht gefunden." };
+  }
+  const assignee = await db.user.findUniqueOrThrow({ where: { id: assignedToId }, select: { displayName: true } });
+
+  let mail: string;
+  let mailSent = false;
+  try {
+    const result = await sendAssigneeLeadMail(lead.id);
+    mailSent = result.sent;
+    mail = result.sent ? `E-Mail an ${result.to} verschickt.` : `Keine E-Mail: ${result.reason}`;
+  } catch (err) {
+    mail = `E-Mail fehlgeschlagen: ${(err as Error).message}`;
+  }
+  const push = await sendPushToUser(assignedToId, {
+    title: "Neuer Lead",
+    body: `Neuer Lead: ${lead.fullName ?? "Unbekannt"}`,
+    url: tenantPath(admin.tenant.slug, `/leads/${lead.id}`),
+    tag: `lead-${lead.id}`,
+  }).catch(() => 0);
+
+  revalidatePath("/[tenant]/settings/distribution-test", "page");
+  revalidatePath("/[tenant]/leads", "page");
+  return {
+    ok: true,
+    assignedTo: assignee.displayName,
+    auto,
+    mail,
+    mailSent,
+    push,
+    leadHref: tenantPath(admin.tenant.slug, `/leads/${lead.id}`),
+  };
 }

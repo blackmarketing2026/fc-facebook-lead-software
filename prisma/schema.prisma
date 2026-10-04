@@ -112,7 +112,7 @@ model User {
   /// Darf den Plattform-Bereich nutzen und sich in alle Mandanten einloggen.
   isPlatformAdmin Boolean  @default(false)
   /// Bekommt eine E-Mail, wenn ihm ein neuer Lead zugewiesen wird.
-  notifyNewLeadEmail Boolean @default(false)
+  notifyNewLeadEmail Boolean @default(true)
   /// Geheimer Schlüssel für den persönlichen Kalender-Abo-Link (Google Kalender "Per URL").
   calendarToken   String?  @unique @db.VarChar(64)
   // Verteilung (gewichtetes Round-Robin)

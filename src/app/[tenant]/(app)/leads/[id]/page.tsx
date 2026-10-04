@@ -35,7 +35,7 @@ function activityText(type: ActivityType, meta: unknown, users: Map<string, stri
     case "STATUS_CHANGED":
       return `Status: ${STATUS_LABELS[m.from as LeadStatus] ?? m.from} → ${STATUS_LABELS[m.to as LeadStatus] ?? m.to}${m.auto ? " (automatisch)" : ""}`;
     case "ASSIGNED":
-      return `Zugewiesen an ${users.get(m.toUserId as string) ?? "?"}${m.auto ? " (automatisch)" : ""}`;
+      return `Zugewiesen an ${users.get(m.toUserId as string) ?? "?"}${m.auto ? " (automatisch)" : ""}${m.test ? " – Verteilungstest" : ""}`;
     case "REMINDER_SET":
       return `${m.type ? reminderLabel(m.type as ReminderType) : "Rückruf"} geplant für ${m.dueAt ? formatDateTime(new Date(m.dueAt as string)) : "?"}`;
     default:

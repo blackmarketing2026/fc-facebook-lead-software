@@ -88,8 +88,10 @@ export async function sendLeadNotificationMail(tenantId: string, leadId: string)
   await sendMail({ to, ...mail });
 }
 
+export type AssigneeMailResult = { sent: true; to: string } | { sent: false; reason: string };
+
 /** Mail an den zugewiesenen Vertriebler – nur, wenn bei ihm "E-Mail bei neuem Lead" angehakt ist. */
-export async function sendAssigneeLeadMail(leadId: string): Promise<void> {
+export async function sendAssigneeLeadMail(leadId: string): Promise<AssigneeMailResult> {
   const lead = await db.lead.findUniqueOrThrow({
     where: { id: leadId },
     select: {
@@ -102,7 +104,11 @@ export async function sendAssigneeLeadMail(leadId: string): Promise<void> {
     },
   });
   const user = lead.assignedTo;
-  if (!user || !user.active || !user.notifyNewLeadEmail || !user.email) return;
+  if (!user) return { sent: false, reason: "Der Lead ist niemandem zugewiesen." };
+  if (!user.active) return { sent: false, reason: `${user.displayName} ist deaktiviert.` };
+  if (!user.notifyNewLeadEmail) return { sent: false, reason: `Bei ${user.displayName} ist „E-Mail bei neuem Lead“ ausgeschaltet.` };
+  if (!user.email) return { sent: false, reason: `${user.displayName} hat keine E-Mail-Adresse.` };
   const mail = buildLeadMail(lead.tenant, { ...lead, assignedTo: user.displayName }, true);
-  await sendMail({ to: [user.email], ...mail });
+  const sent = await sendMail({ to: [user.email], ...mail });
+  return sent ? { sent: true, to: user.email } : { sent: false, reason: "Der Mailversand (SMTP) ist auf dem Server nicht eingerichtet." };
 }
