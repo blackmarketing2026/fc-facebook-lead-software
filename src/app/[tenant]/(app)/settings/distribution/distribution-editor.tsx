@@ -82,8 +82,6 @@ export function DistributionEditor({ users }: { users: User[] }) {
               return (
                 <tr
                   key={r.id}
-                  draggable
-                  onDragStart={() => setDragIndex(i)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => {
                     if (dragIndex !== null) move(dragIndex, i);
@@ -93,7 +91,20 @@ export function DistributionEditor({ users }: { users: User[] }) {
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <span className="cursor-grab select-none px-1 text-slate-400" title="Ziehen zum Sortieren">
+                      {/* Nur der Griff ist ziehbar – sonst würde Gedrückthalten auf dem Regler die ganze Zeile verschieben. */}
+                      <span
+                        draggable
+                        onDragStart={(e) => {
+                          setDragIndex(i);
+                          e.dataTransfer.effectAllowed = "move";
+                          e.dataTransfer.setData("text/plain", r.id);
+                          const row = e.currentTarget.closest("tr");
+                          if (row) e.dataTransfer.setDragImage(row, 20, 20);
+                        }}
+                        onDragEnd={() => setDragIndex(null)}
+                        className="cursor-grab select-none px-1 text-slate-400 active:cursor-grabbing"
+                        title="Ziehen zum Sortieren"
+                      >
                         ⠿
                       </span>
                       <span className="w-5 tabular-nums">{i + 1}.</span>
