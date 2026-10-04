@@ -18,6 +18,7 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
   const links = [
     { href: t("/dashboard"), label: "Dashboard" },
     { href: t("/leads"), label: "Leads" },
+    { href: t("/calendar"), label: "Kalender" },
     ...(user.role === "ADMIN"
       ? [
           { href: t("/settings/users"), label: "Mitglieder" },

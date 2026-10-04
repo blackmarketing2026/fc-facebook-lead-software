@@ -51,7 +51,13 @@ function getTransporter(): Transporter | null {
   return transporter;
 }
 
-export type Mail = { to: string[]; subject: string; text: string; html: string };
+export type Mail = {
+  to: string[];
+  subject: string;
+  text: string;
+  html: string;
+  attachments?: { filename: string; content: string; contentType: string }[];
+};
 
 /** Verschickt eine Mail über SMTP. Gibt false zurück, wenn SMTP nicht eingerichtet ist. */
 export async function sendMail(mail: Mail): Promise<boolean> {

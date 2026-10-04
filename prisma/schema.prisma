@@ -33,6 +33,18 @@ enum ActivityType {
   REMINDER_DONE
 }
 
+/// Art eines geplanten Termins / einer Aufgabe zu einem Lead.
+enum ReminderType {
+  RUECKRUF
+  ANRUF
+  WHATSAPP
+  EMAIL
+  TERMIN
+  VERTRAG
+  RUECKMELDUNG
+  SONSTIGES
+}
+
 enum InboundStatus {
   PROCESSED
   FAILED
@@ -101,6 +113,8 @@ model User {
   isPlatformAdmin Boolean  @default(false)
   /// Bekommt eine E-Mail, wenn ihm ein neuer Lead zugewiesen wird.
   notifyNewLeadEmail Boolean @default(false)
+  /// Geheimer Schlüssel für den persönlichen Kalender-Abo-Link (Google Kalender "Per URL").
+  calendarToken   String?  @unique @db.VarChar(64)
   // Verteilung (gewichtetes Round-Robin)
   distOrder       Int      @default(0)
   distWeight      Int      @default(1)
@@ -179,6 +193,8 @@ model Reminder {
   userId     String
   user       User      @relation(fields: [userId], references: [id])
   dueAt      DateTime
+  type       ReminderType @default(RUECKRUF)
+  durationMinutes Int     @default(15)
   title      String
   comment    String?   @db.Text
   done       Boolean   @default(false)

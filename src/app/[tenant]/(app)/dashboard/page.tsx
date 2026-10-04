@@ -2,7 +2,10 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { db } from "@/lib/db";
 import { formatDateTime, parseBerlinLocal, TIMEZONE } from "@/lib/format";
+import { googleCalendarUrl } from "@/lib/ics";
 import { STATUS_LABELS, STATUSES } from "@/lib/labels";
+import { reminderEvent } from "@/lib/reminder-calendar";
+import { reminderIcon, reminderLabel } from "@/lib/reminder-types";
 import { requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
 import { ReminderActions } from "../leads/[id]/lead-controls";
@@ -26,7 +29,7 @@ export default async function DashboardPage() {
       where: { userId: user.id, done: false, lead: { tenantId: user.tenantId } },
       orderBy: { dueAt: "asc" },
       take: 30,
-      include: { lead: { select: { id: true, fullName: true, phone: true, status: true } } },
+      include: { lead: { select: { id: true, fullName: true, phone: true, email: true, status: true } } },
     }),
     db.lead.findMany({
       where: { tenantId: user.tenantId, assignedToId: user.id, status: "NEU" },
@@ -42,10 +45,10 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card p-5">
-          <h2 className="mb-1 font-semibold">📞 Als Nächstes anrufen</h2>
-          <p className="mb-4 text-sm text-slate-500">Deine geplanten Rückrufe, der dringendste zuerst.</p>
+          <h2 className="mb-1 font-semibold">📅 Als Nächstes</h2>
+          <p className="mb-4 text-sm text-slate-500">Deine geplanten Termine und Aufgaben, der dringendste zuerst.</p>
           {reminders.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">Keine offenen Rückrufe.</p>
+            <p className="py-6 text-center text-sm text-slate-500">Keine offenen Termine.</p>
           ) : (
             <ul className="space-y-2">
               {reminders.map((r) => {
@@ -68,7 +71,8 @@ export default async function DashboardPage() {
                       </span>
                     </div>
                     <div className="mt-0.5 text-sm text-slate-600">
-                      {r.title}
+                      {reminderIcon(r.type)} {reminderLabel(r.type)}
+                      {r.title !== reminderLabel(r.type) && ` · ${r.title}`}
                       {r.comment && ` – ${r.comment}`}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -79,7 +83,7 @@ export default async function DashboardPage() {
                       ) : (
                         <span />
                       )}
-                      <ReminderActions reminderId={r.id} done={false} />
+                      <ReminderActions reminderId={r.id} done={false} googleUrl={googleCalendarUrl(reminderEvent(r, slug))} />
                     </div>
                   </li>
                 );

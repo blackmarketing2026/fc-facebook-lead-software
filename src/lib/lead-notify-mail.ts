@@ -14,7 +14,7 @@ export type LeadMailData = {
 };
 
 /** Öffentliche Adresse: APP_URL, sonst die Produktions-Domain, die Vercel automatisch setzt. */
-function absoluteUrl(path: string) {
+export function absoluteUrl(path: string) {
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   const base = process.env.APP_URL || (vercel ? `https://${vercel}` : "http://localhost:3000");
   return `${base.replace(/\/$/, "")}${path}`;

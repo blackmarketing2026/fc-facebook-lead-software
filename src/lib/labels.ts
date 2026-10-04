@@ -26,8 +26,8 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   WHATSAPP_CLICKED: "WhatsApp geöffnet",
   EMAIL_CLICKED: "E-Mail geöffnet",
   NOTE_ADDED: "Notiz hinzugefügt",
-  REMINDER_SET: "Rückruf geplant",
-  REMINDER_DONE: "Rückruf erledigt",
+  REMINDER_SET: "Termin geplant",
+  REMINDER_DONE: "Termin erledigt",
 };
 
 export const STATUSES = Object.keys(STATUS_LABELS) as LeadStatus[];

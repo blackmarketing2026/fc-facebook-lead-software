@@ -1,6 +1,7 @@
 import { db } from "../lib/db";
 import { formatTime } from "../lib/format";
 import { sendPushToUser } from "../lib/push";
+import { reminderLabel } from "../lib/reminder-types";
 import { tenantPath } from "../lib/tenant-paths";
 
 const LEAD_TIME_MS = 5 * 60 * 1000; // 5 Minuten vorher erinnern
@@ -17,8 +18,8 @@ export async function checkReminders(): Promise<void> {
     const claimed = await db.reminder.updateMany({ where: { id: r.id, notifiedAt: null }, data: { notifiedAt: new Date() } });
     if (claimed.count === 0) continue;
     await sendPushToUser(r.userId, {
-      title: "Rückruf fällig",
-      body: `Rückruf: ${r.lead.fullName ?? "Lead"} um ${formatTime(r.dueAt)}${r.title ? ` – ${r.title}` : ""}`,
+      title: `${reminderLabel(r.type)} fällig`,
+      body: `${reminderLabel(r.type)}: ${r.lead.fullName ?? "Lead"} um ${formatTime(r.dueAt)}${r.title && r.title !== reminderLabel(r.type) ? ` – ${r.title}` : ""}`,
       url: tenantPath(r.lead.tenant.slug, `/leads/${r.lead.id}`),
       tag: `reminder-${r.id}`,
     });

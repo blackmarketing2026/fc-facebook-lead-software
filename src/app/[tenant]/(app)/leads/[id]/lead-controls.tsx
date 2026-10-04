@@ -1,8 +1,8 @@
 "use client";
 
-import type { LeadStatus } from "@prisma/client";
+import type { LeadStatus, ReminderType } from "@prisma/client";
 import { useParams } from "next/navigation";
-import { useActionState, useEffect, useRef, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   addNote,
   completeReminder,
@@ -14,6 +14,7 @@ import {
   type FormState,
 } from "@/app/actions/leads";
 import { STATUS_LABELS, STATUSES } from "@/lib/labels";
+import { DURATION_OPTIONS, formatDuration, REMINDER_TYPE_KEYS, REMINDER_TYPES } from "@/lib/reminder-types";
 
 export function StatusSelect({ leadId, status }: { leadId: string; status: LeadStatus }) {
   const [pending, start] = useTransition();
@@ -139,40 +140,88 @@ export function NoteForm({ leadId }: { leadId: string }) {
 export function ReminderForm({ leadId, defaultDue }: { leadId: string; defaultDue: string }) {
   const [state, action, pending] = useActionState(createReminder.bind(null, leadId), undefined);
   const ref = useResetOnSuccess(state);
+  const [type, setType] = useState<ReminderType>("RUECKRUF");
+  const [duration, setDuration] = useState(REMINDER_TYPES.RUECKRUF.duration);
+  const [setTermin, setSetTermin] = useState(REMINDER_TYPES.RUECKRUF.setTermin);
+  const choose = (t: ReminderType) => {
+    setType(t);
+    setDuration(REMINDER_TYPES[t].duration);
+    setSetTermin(REMINDER_TYPES[t].setTermin);
+  };
   return (
     <form ref={ref} action={action} className="space-y-3">
+      <div>
+        <span className="label">Was steht an?</span>
+        <input type="hidden" name="type" value={type} />
+        <div className="flex flex-wrap gap-1.5">
+          {REMINDER_TYPE_KEYS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => choose(t)}
+              aria-pressed={type === t}
+              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                type === t ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              {REMINDER_TYPES[t].icon} {REMINDER_TYPES[t].label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="label">Datum & Uhrzeit</span>
           <input type="datetime-local" name="dueAt" required defaultValue={defaultDue} className="input" />
         </label>
         <label className="block">
-          <span className="label">Titel</span>
-          <input name="title" placeholder="Rückruf" className="input" />
+          <span className="label">Dauer</span>
+          <select name="durationMinutes" value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="input">
+            {DURATION_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                {formatDuration(m)}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
+      <label className="block">
+        <span className="label">Titel (optional)</span>
+        <input name="title" placeholder={REMINDER_TYPES[type].label} className="input" />
+      </label>
       <label className="block">
         <span className="label">Kommentar (optional)</span>
         <input name="comment" className="input" />
       </label>
       <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input type="checkbox" name="setTermin" defaultChecked className="h-4 w-4" />
+        <input
+          type="checkbox"
+          name="setTermin"
+          checked={setTermin}
+          onChange={(e) => setSetTermin(e.target.checked)}
+          className="h-4 w-4"
+        />
         Status auf „Termin“ setzen
       </label>
       {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
-      {state?.ok && <p className="text-sm text-green-700">Rückruf gespeichert. Du wirst 5 Minuten vorher erinnert.</p>}
+      {state?.ok && <p className="text-sm text-green-700">{state.message ?? "Gespeichert."} Du wirst 5 Minuten vorher erinnert.</p>}
       <button disabled={pending} className="btn-primary">
-        {pending ? "Speichern …" : "Rückruf planen"}
+        {pending ? "Speichern …" : `${REMINDER_TYPES[type].label} planen`}
       </button>
     </form>
   );
 }
 
-export function ReminderActions({ reminderId, done }: { reminderId: string; done: boolean }) {
+export function ReminderActions({ reminderId, done, googleUrl }: { reminderId: string; done: boolean; googleUrl?: string }) {
   const { tenant } = useParams<{ tenant: string }>();
   const [pending, start] = useTransition();
   return (
     <div className="flex flex-wrap gap-2">
+      {googleUrl && !done && (
+        <a href={googleUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary px-2 py-1 text-xs">
+          📆 Google Kalender
+        </a>
+      )}
       <a href={`/${tenant}/api/reminders/${reminderId}/ics`} className="btn-secondary px-2 py-1 text-xs">
         📅 .ics
       </a>
@@ -187,7 +236,7 @@ export function ReminderActions({ reminderId, done }: { reminderId: string; done
       )}
       <button
         disabled={pending}
-        onClick={() => confirm("Rückruf löschen?") && start(() => deleteReminder(reminderId))}
+        onClick={() => confirm("Termin löschen?") && start(() => deleteReminder(reminderId))}
         className="btn-danger px-2 py-1 text-xs"
       >
         Löschen

@@ -1,11 +1,14 @@
-import type { ActivityType, LeadStatus } from "@prisma/client";
+import type { ActivityType, LeadStatus, ReminderType } from "@prisma/client";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime, telHref, TIMEZONE, whatsappNumber } from "@/lib/format";
 import { ACTIVITY_LABELS, STATUS_LABELS } from "@/lib/labels";
+import { googleCalendarUrl } from "@/lib/ics";
 import { isContactKey } from "@/lib/lead-parser";
+import { reminderEvent } from "@/lib/reminder-calendar";
+import { formatDuration, reminderIcon, reminderLabel } from "@/lib/reminder-types";
 import { requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
 import {
@@ -19,7 +22,7 @@ import {
 
 export const metadata = { title: "Lead" };
 
-/** Morgen 10:00 Uhr (Berlin) als Vorschlag für den Rückruf, im Format von datetime-local. */
+/** Morgen 10:00 Uhr (Berlin) als Vorschlag für den Termin, im Format von datetime-local. */
 function defaultDueValue(): string {
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const day = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(tomorrow); // YYYY-MM-DD
@@ -34,7 +37,7 @@ function activityText(type: ActivityType, meta: unknown, users: Map<string, stri
     case "ASSIGNED":
       return `Zugewiesen an ${users.get(m.toUserId as string) ?? "?"}${m.auto ? " (automatisch)" : ""}`;
     case "REMINDER_SET":
-      return `Rückruf geplant für ${m.dueAt ? formatDateTime(new Date(m.dueAt as string)) : "?"}`;
+      return `${m.type ? reminderLabel(m.type as ReminderType) : "Rückruf"} geplant für ${m.dueAt ? formatDateTime(new Date(m.dueAt as string)) : "?"}`;
     default:
       return ACTIVITY_LABELS[type];
   }
@@ -163,7 +166,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
 
         <div className="space-y-6">
           <section className="card p-5">
-            <h2 className="mb-3 font-semibold">Rückruf planen</h2>
+            <h2 className="mb-3 font-semibold">Termin / Aufgabe planen</h2>
             <ReminderForm leadId={lead.id} defaultDue={defaultDueValue()} />
             {lead.reminders.length > 0 && (
               <ul className="mt-5 space-y-3">
@@ -177,16 +180,21 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
                       }`}
                     >
                       <div className="text-sm font-medium">
-                        {r.done && "✓ "}
-                        {r.title}
+                        {r.done ? "✓ " : `${reminderIcon(r.type)} `}
+                        {reminderLabel(r.type)}
+                        {r.title !== reminderLabel(r.type) && <span className="font-normal text-slate-600"> – {r.title}</span>}
                       </div>
                       <div className={`text-xs ${overdue ? "text-red-700" : "text-slate-500"}`}>
-                        {formatDateTime(r.dueAt)} · {r.user.displayName}
+                        {formatDateTime(r.dueAt)} · {formatDuration(r.durationMinutes)} · {r.user.displayName}
                         {overdue && " · überfällig"}
                       </div>
                       {r.comment && <p className="mt-1 text-sm text-slate-600">{r.comment}</p>}
                       <div className="mt-2">
-                        <ReminderActions reminderId={r.id} done={r.done} />
+                        <ReminderActions
+                          reminderId={r.id}
+                          done={r.done}
+                          googleUrl={googleCalendarUrl(reminderEvent({ ...r, lead }, user.tenant.slug))}
+                        />
                       </div>
                     </li>
                   );
