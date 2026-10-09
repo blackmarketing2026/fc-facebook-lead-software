@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { missingMailerVars, parseEmailList } from "@/lib/mailer";
 import { requireAdmin } from "@/lib/session";
+import { PLATFORM_TENANT_SLUG } from "@/lib/tenant-paths";
 import { NotifyEmailsForm, TestMailButton } from "./notification-forms";
 
 export const metadata = { title: "Benachrichtigungen" };
@@ -17,9 +18,15 @@ export default async function NotificationsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Benachrichtigungen</h1>
         <p className="text-sm text-slate-500">
-          Bei jedem neuen Lead in diesem Dashboard geht eine E-Mail mit dem Namen des Leads und einem Link direkt zum
-          Lead-Profil raus. Kontaktdaten stehen nicht in der Mail, nur im Dashboard.
+          Die unten eingetragenen Adressen bekommen bei jedem neuen Lead in diesem Dashboard eine E-Mail mit Namen und
+          Link zum Lead-Profil. Kontaktdaten stehen in diesen E-Mails nur im Dashboard.
         </p>
+        {admin.isPlatformAdmin && admin.tenant.slug === PLATFORM_TENANT_SLUG && (
+          <p className="mt-2 text-sm text-slate-500">
+            Der Master-Account erhält zusätzlich für jeden neuen Lead aus allen Dashboards eine ausführliche E-Mail an
+            seine hinterlegte Adresse mit Kontaktdaten, Formularantworten und direkten Kontaktaktionen.
+          </p>
+        )}
       </div>
 
       {!smtp && (

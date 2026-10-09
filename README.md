@@ -56,6 +56,7 @@ Browser-Push funktioniert nur über **HTTPS** (oder `localhost`).
 - **Parser** (`src/lib/lead-parser.ts`): `full_name`, `email`, `phone_number` und `Sprache` werden zu Lead-Feldern; alle Fragen und Antworten werden zusätzlich gespeichert. Neue Formularfelder erscheinen automatisch, ohne Code-Änderung.
 - **Verteilung** (`src/lib/distribution.ts`): Smooth Weighted Round-Robin. Reihenfolge, Gewicht (1–10) und Pause sind unter **Verteilung** einstellbar, mit Vorschau. Die Zuweisung läuft in einer gesperrten Transaktion, damit gleichzeitig eingehende Leads sich nicht überschneiden.
 - **Rechte:** Vertriebler sehen nur ihre eigenen Leads (serverseitig erzwungen), der Admin sieht alles und verwaltet Mitglieder, Verteilung und Postfach.
+- **Master-Benachrichtigung:** Der aktive Master-Account erhält bei jedem neuen Lead aus allen Dashboards eine E-Mail an seine hinterlegte Adresse. Sie enthält Dashboard, Kontaktdaten und Formularantworten sowie direkte Links zum Anrufen, für E-Mail und WhatsApp (soweit Kontaktdaten vorhanden sind).
 - **Erinnerungen:** Rückrufe erscheinen im Dashboard („Als Nächstes anrufen“) und in der Glocke. Der Worker schickt 5 Minuten vorher eine Push-Nachricht. Jeder Termin lässt sich als `.ics` in Outlook oder Google Kalender übernehmen.
 
 ## Befehle

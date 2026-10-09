@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { formatDateTime } from "./format";
+import { formatDateTime, telHref, whatsappNumber } from "./format";
 import { isContactKey } from "./lead-parser";
 import { escapeHtml, parseEmailList, sendMail } from "./mailer";
 import { PLATFORM_TENANT_SLUG, PRODUCT_NAME, tenantPath } from "./tenant-paths";
@@ -11,6 +11,12 @@ export type LeadMailData = {
   assignedTo: string | null;
   /** Formular-Antworten; Kontaktfelder (Name, Telefon, E-Mail) werden beim Bauen der Mail herausgefiltert. */
   answers?: { questionKey: string; questionLabel: string; answers: unknown }[];
+};
+
+export type MasterLeadMailData = LeadMailData & {
+  email: string | null;
+  phone: string | null;
+  language: string | null;
 };
 
 /** Öffentliche Adresse: APP_URL, sonst die Produktions-Domain, die Vercel automatisch setzt. */
@@ -72,13 +78,86 @@ export function buildLeadMail(tenant: { slug: string; name: string }, lead: Lead
   return { subject: heading, text, html };
 }
 
+/** Vollständige Lead-Zusammenfassung für den Master-Account über alle Dashboards. */
+export function buildMasterLeadMail(tenant: { slug: string; name: string }, lead: MasterLeadMailData) {
+  const leadUrl = absoluteUrl(tenantPath(PLATFORM_TENANT_SLUG, `/leads/${lead.id}`));
+  const phone = lead.phone?.trim() || null;
+  const email = lead.email?.trim() || null;
+  const waNumber = phone ? whatsappNumber(phone) : "";
+  const actions = [
+    phone ? { label: "Anrufen", href: telHref(phone), color: "#059669" } : null,
+    email ? { label: "E-Mail", href: `mailto:${encodeURIComponent(email).replace(/%40/gi, "@")}`, color: "#2563eb" } : null,
+    /^\d{8,15}$/.test(waNumber) ? { label: "WhatsApp", href: `https://wa.me/${waNumber}`, color: "#16a34a" } : null,
+  ].filter((action): action is { label: string; href: string; color: string } => action !== null);
+  const rows: [string, string][] = [
+    ["Dashboard", tenant.name],
+    ["Name", lead.fullName || "Unbekannt"],
+    ["Telefon", phone || "–"],
+    ["E-Mail", email || "–"],
+    ["Sprache", lead.language || "–"],
+    ["Eingang", formatDateTime(lead.receivedAt)],
+    ["Zugewiesen an", lead.assignedTo || "Niemand"],
+    ...(lead.answers ?? [])
+      .filter((answer) => !isContactKey(answer.questionKey))
+      .map((answer): [string, string] => [
+        answer.questionLabel,
+        Array.isArray(answer.answers) ? answer.answers.map(String).join(", ") || "–" : "–",
+      ]),
+  ];
+  const subject = `Neuer Lead · ${tenant.name}: ${lead.fullName || "Unbekannt"}`;
+  const text = [
+    subject,
+    "",
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+    "",
+    ...actions.map(({ label, href }) => `${label}: ${href}`),
+    `Lead im Master-Dashboard öffnen: ${leadUrl}`,
+  ].join("\n");
+  const html = `<!doctype html>
+<html lang="de"><body style="margin:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+  <div style="max-width:600px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px">
+    <p style="margin:0 0 4px;font-size:13px;color:#64748b">${escapeHtml(tenant.name)}</p>
+    <h1 style="margin:0 0 20px;font-size:21px">Neuer Lead: ${escapeHtml(lead.fullName || "Unbekannt")}</h1>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      ${rows.map(([label, value]) => `<tr><td style="padding:7px 12px 7px 0;color:#64748b;width:34%;vertical-align:top">${escapeHtml(label)}</td><td style="padding:7px 0;vertical-align:top">${escapeHtml(value)}</td></tr>`).join("")}
+    </table>
+    <p style="margin:24px 0 12px">
+      ${actions.map(({ label, href, color }) => `<a href="${escapeHtml(href)}" style="display:inline-block;margin:0 8px 8px 0;padding:10px 16px;border-radius:6px;background:${color};color:#fff;text-decoration:none;font-weight:bold;font-size:14px">${label}</a>`).join("")}
+    </p>
+    <p style="margin:4px 0"><a href="${escapeHtml(leadUrl)}" style="color:#2563eb">Lead im Master-Dashboard öffnen</a></p>
+  </div>
+</body></html>`;
+  return { subject, text, html };
+}
+
+/** Die E-Mail-Adresse folgt Änderungen am Master-Account und ist nicht fest im Code hinterlegt. */
+export async function sendMasterLeadMail(leadId: string): Promise<string | null> {
+  const master = await db.user.findUnique({
+    where: { id: "user_master_account" },
+    select: { email: true, active: true, isPlatformAdmin: true },
+  });
+  if (!master?.active || !master.isPlatformAdmin || !master.email) return null;
+  const lead = await db.lead.findUniqueOrThrow({
+    where: { id: leadId },
+    select: {
+      id: true, fullName: true, email: true, phone: true, language: true, receivedAt: true,
+      tenant: { select: { slug: true, name: true } },
+      assignedTo: { select: { displayName: true } },
+      answers: { orderBy: { position: "asc" }, select: { questionKey: true, questionLabel: true, answers: true } },
+    },
+  });
+  const mail = buildMasterLeadMail(lead.tenant, { ...lead, assignedTo: lead.assignedTo?.displayName ?? null });
+  const sent = await sendMail({ to: [master.email], ...mail });
+  return sent ? master.email : null;
+}
+
 /** Schickt die "Neuer Lead"-Mail an alle Adressen, die im Dashboard hinterlegt sind. */
-export async function sendLeadNotificationMail(tenantId: string, leadId: string): Promise<void> {
+export async function sendLeadNotificationMail(tenantId: string, leadId: string, excludeEmail?: string): Promise<void> {
   const tenant = await db.tenant.findUniqueOrThrow({
     where: { id: tenantId },
     select: { slug: true, name: true, leadNotifyEmails: true },
   });
-  const to = parseEmailList(tenant.leadNotifyEmails);
+  const to = parseEmailList(tenant.leadNotifyEmails).filter((email) => email.toLowerCase() !== excludeEmail?.toLowerCase());
   if (to.length === 0) return;
   const lead = await db.lead.findUniqueOrThrow({
     where: { id: leadId },

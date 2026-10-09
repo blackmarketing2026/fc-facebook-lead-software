@@ -4,7 +4,7 @@ import { assignNextSalesUser } from "./distribution";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
 import { parseLeadText, type ParsedAnswer } from "./lead-parser";
 import { resolveTenantId, tenantCodeFromSubject } from "./lead-routing";
-import { sendAssigneeLeadMail, sendLeadNotificationMail } from "./lead-notify-mail";
+import { sendAssigneeLeadMail, sendLeadNotificationMail, sendMasterLeadMail } from "./lead-notify-mail";
 import { sendPushToUser } from "./push";
 
 export type InboundMail = {
@@ -146,8 +146,12 @@ async function createLead(
 }
 
 async function notifyNewLead(tenantId: string, leadId: string, name: string | null, userId: string | null) {
+  const masterEmail = await sendMasterLeadMail(leadId).catch((err) => {
+    console.error("[mail:master]", err);
+    return null;
+  });
   // Die Mail an die im Dashboard hinterlegten Adressen geht auch raus, wenn niemand zugewiesen wurde.
-  await sendLeadNotificationMail(tenantId, leadId).catch((err) => console.error("[mail]", err));
+  await sendLeadNotificationMail(tenantId, leadId, masterEmail ?? undefined).catch((err) => console.error("[mail]", err));
   if (userId) await sendAssigneeLeadMail(leadId).catch((err) => console.error("[mail]", err));
 
   // Push an den zugewiesenen Vertriebler, die Admins des Dashboards und den Hauptaccount (sieht alle Dashboards).
