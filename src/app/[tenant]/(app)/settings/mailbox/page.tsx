@@ -57,7 +57,7 @@ export default async function MailboxPage() {
 
       <div className="grid gap-4 sm:grid-cols-4">
         <div className="card p-4 sm:col-span-1">
-          <div className="text-xs uppercase text-slate-500">Letzter Abruf</div>
+          <div className="text-xs uppercase text-slate-500">Letzter Abruf (zentrales Postfach)</div>
           {lastRun ? (
             <>
               <div className={`mt-1 font-medium ${lastRun.ok ? "text-green-700" : "text-red-700"}`}>

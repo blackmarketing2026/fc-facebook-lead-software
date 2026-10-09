@@ -67,22 +67,32 @@ export async function processInboundMail(mail: InboundMail, forceTenantId?: stri
     return { status: "IGNORED", error: parsed.error, inboundId: inbound.id };
   }
 
+  let created: { lead: { id: string; fullName: string | null }; assignedToId: string | null; inboundId: string };
   try {
-    const { lead, assignedToId, inboundId } = await db.$transaction(async (tx) => {
+    created = await db.$transaction(async (tx) => {
       const inbound = await tx.inboundEmail.create({ data: { ...inboundData, status: "PROCESSED" } });
-      const created = await createLead(tx, tenantId, parsed.lead, inbound.id, mail.receivedAt);
-      return { ...created, inboundId: inbound.id };
+      const leadResult = await createLead(tx, tenantId, parsed.lead, inbound.id, mail.receivedAt);
+      return { ...leadResult, inboundId: inbound.id };
     });
-    await notifyNewLead(tenantId, lead.id, lead.fullName, assignedToId);
-    return { status: "PROCESSED", leadId: lead.id, assignedToId, inboundId };
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       return { status: "DUPLICATE" };
     }
     const error = (err as Error).message;
-    const inbound = await db.inboundEmail.create({ data: { ...inboundData, status: "FAILED", error } });
+    let inbound;
+    try {
+      inbound = await db.inboundEmail.create({ data: { ...inboundData, status: "FAILED", error } });
+    } catch (recordError) {
+      if (recordError instanceof Prisma.PrismaClientKnownRequestError && recordError.code === "P2002") {
+        return { status: "DUPLICATE" };
+      }
+      throw recordError;
+    }
     return { status: "FAILED", error, inboundId: inbound.id };
   }
+  const { lead, assignedToId, inboundId } = created;
+  await notifyNewLead(tenantId, lead.id, lead.fullName, assignedToId).catch((err) => console.error("[notify]", err));
+  return { status: "PROCESSED", leadId: lead.id, assignedToId, inboundId };
 }
 
 /** Verarbeitet eine gespeicherte IGNORED/FAILED-Mail erneut (Admin-Button). */

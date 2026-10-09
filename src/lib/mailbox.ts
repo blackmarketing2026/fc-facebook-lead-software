@@ -5,6 +5,19 @@ import { processInboundMail } from "./lead-service";
 
 const SEEN_FLAG = String.raw`\Seen`;
 const PROCESSED_FOLDER = process.env.IMAP_PROCESSED_FOLDER || "Verarbeitet";
+const MAX_MESSAGES_PER_POLL = 5;
+
+type PollResult =
+  | { ok: true; processed: number; ignored: number; deleted: number; remaining?: number }
+  | { ok: false; message: string };
+
+function imapErrorMessage(error: unknown): string {
+  const response = (error as { response?: unknown })?.response;
+  if (typeof response === "string" && /AUTHENTICATIONFAILED|authentication failed/i.test(response)) {
+    return "IMAP-Anmeldung fehlgeschlagen. Benutzername und Passwort des Postfachs prüfen.";
+  }
+  return error instanceof Error ? error.message : "Unbekannter IMAP-Fehler";
+}
 
 export function imapConfigured(): boolean {
   const { IMAP_HOST, IMAP_USER, IMAP_PASS } = process.env;
@@ -37,11 +50,12 @@ async function setStatus(value: string) {
   });
 }
 
-/** Ruft alle ungelesenen Mails ab und legt daraus Leads an. */
-export async function pollMailbox(): Promise<void> {
+/** Ruft neue Mails ab; reconcile gleicht auch gelesene Mails und den alten Ordner ab. */
+export async function pollMailbox(reconcile = false): Promise<PollResult> {
   if (!imapConfigured()) {
-    await setStatus(JSON.stringify({ at: new Date().toISOString(), ok: false, message: "IMAP nicht konfiguriert (Platzhalter in .env)" }));
-    return;
+    const message = "IMAP nicht konfiguriert (Platzhalter in .env)";
+    await setStatus(JSON.stringify({ at: new Date().toISOString(), ok: false, message }));
+    return { ok: false, message };
   }
 
   const client = new ImapFlow({
@@ -54,24 +68,43 @@ export async function pollMailbox(): Promise<void> {
 
   let processed = 0;
   let ignored = 0;
+  let deleted = 0;
+  let remaining = 0;
   try {
     await client.connect();
-    const lock = await client.getMailboxLock("INBOX");
-    try {
-      const uids = (await client.search({ seen: false }, { uid: true })) || [];
-      if (uids.length > 0) {
-        // Erst alles laden, dann verarbeiten: während fetch() sind keine anderen IMAP-Befehle erlaubt.
+    if (!client.capabilities.has("UIDPLUS")) throw new Error("IMAP-Server unterstuetzt kein gezieltes Loeschen per UIDPLUS");
+
+    for (const folder of new Set(reconcile ? ["INBOX", PROCESSED_FOLDER] : ["INBOX"])) {
+      const lock = await client.getMailboxLock(folder);
+      try {
+        // Pro Lauf nur wenige Mails bearbeiten, damit der Cron-Aufruf sein Zeitlimit einhaelt.
+        const uids = ((await client.search(reconcile ? { all: true } : { seen: false }, { uid: true })) || []).slice(0, MAX_MESSAGES_PER_POLL);
+        if (uids.length === 0) continue;
+        // Waehrend fetch() sind keine weiteren IMAP-Befehle erlaubt.
         const messages: { uid: number; source: Buffer }[] = [];
         for await (const msg of client.fetch(uids, { uid: true, source: true }, { uid: true })) {
           if (msg.source) messages.push({ uid: msg.uid, source: msg.source });
         }
 
-        const done: number[] = [];
-        const seenOnly: number[] = [];
         for (const { uid, source } of messages) {
           const mail = await simpleParser(source);
+          const messageId = mail.messageId || `uid-${uid}-${mail.date?.getTime() ?? 0}`;
+          const existing = await db.inboundEmail.findUnique({
+            where: { messageId },
+            select: { status: true, lead: { select: { id: true } } },
+          });
+          if (existing?.status === "PROCESSED" && existing.lead) {
+            if (!(await client.messageDelete(uid, { uid: true }))) throw new Error(`IMAP-Mail ${uid} konnte nicht geloescht werden`);
+            deleted++;
+            continue;
+          }
+          if (existing) {
+            if (!reconcile && existing.status === "IGNORED") await client.messageFlagsAdd(uid, [SEEN_FLAG], { uid: true });
+            continue;
+          }
+
           const result = await processInboundMail({
-            messageId: mail.messageId || `uid-${uid}-${mail.date?.getTime() ?? Date.now()}`,
+            messageId,
             from: mail.from?.text,
             to: recipients(mail),
             subject: mail.subject,
@@ -81,37 +114,38 @@ export async function pollMailbox(): Promise<void> {
           });
           if (result.status === "PROCESSED") {
             processed++;
-            done.push(uid);
+            if (!(await client.messageDelete(uid, { uid: true }))) throw new Error(`IMAP-Mail ${uid} konnte nicht geloescht werden`);
+            deleted++;
           } else if (result.status === "IGNORED") {
             ignored++;
-            seenOnly.push(uid);
+            if (!reconcile) await client.messageFlagsAdd(uid, [SEEN_FLAG], { uid: true });
           } else if (result.status === "DUPLICATE") {
-            seenOnly.push(uid);
+            // Ein paralleler Abruf kann den Lead inzwischen angelegt haben.
+            const saved = await db.inboundEmail.findUnique({
+              where: { messageId },
+              select: { status: true, lead: { select: { id: true } } },
+            });
+            if (saved?.status === "PROCESSED" && saved.lead) {
+              if (!(await client.messageDelete(uid, { uid: true }))) throw new Error(`IMAP-Mail ${uid} konnte nicht geloescht werden`);
+              deleted++;
+            }
           }
-          // FAILED bleibt ungelesen im Posteingang, damit nichts verloren geht.
+          // FAILED bleibt im Postfach, damit kein Lead verloren geht.
         }
-
-        if (done.length > 0) {
-          await client.messageFlagsAdd(done, [SEEN_FLAG], { uid: true });
-          try {
-            await client.mailboxCreate(PROCESSED_FOLDER).catch(() => {});
-            await client.messageMove(done, PROCESSED_FOLDER, { uid: true });
-          } catch (err) {
-            console.warn("[imap] Verschieben nach", PROCESSED_FOLDER, "fehlgeschlagen:", (err as Error).message);
-          }
-        }
-        // Mails ohne Lead als gelesen markieren, damit sie nicht jedes Mal neu geprüft werden.
-        if (seenOnly.length > 0) await client.messageFlagsAdd(seenOnly, [SEEN_FLAG], { uid: true });
+        if (reconcile) remaining += ((await client.search({ all: true }, { uid: true })) || []).length;
+      } finally {
+        lock.release();
       }
-    } finally {
-      lock.release();
     }
     await client.logout();
-    await setStatus(JSON.stringify({ at: new Date().toISOString(), ok: true, processed, ignored }));
-    if (processed || ignored) console.log(`[imap] ${processed} Leads angelegt, ${ignored} Mails ignoriert`);
+    await setStatus(JSON.stringify({ at: new Date().toISOString(), ok: true, processed, ignored, deleted }));
+    if (processed || ignored || deleted) console.log(`[imap] ${processed} Leads angelegt, ${ignored} Mails ignoriert, ${deleted} Mails geloescht`);
+    return { ok: true, processed, ignored, deleted, ...(reconcile ? { remaining } : {}) };
   } catch (err) {
-    console.error("[imap] Fehler:", (err as Error).message);
-    await setStatus(JSON.stringify({ at: new Date().toISOString(), ok: false, message: (err as Error).message }));
+    const message = imapErrorMessage(err);
+    console.error("[imap] Fehler:", message);
+    await setStatus(JSON.stringify({ at: new Date().toISOString(), ok: false, message }));
     client.close();
+    return { ok: false, message };
   }
 }

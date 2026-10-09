@@ -5,7 +5,7 @@ const IMAP_INTERVAL = Number(process.env.IMAP_POLL_SECONDS || 60) * 1000;
 const REMINDER_INTERVAL = 60 * 1000;
 
 /** Führt eine Aufgabe periodisch aus, ohne dass sich Läufe überlappen. */
-function every(name: string, ms: number, task: () => Promise<void>) {
+function every(name: string, ms: number, task: () => Promise<unknown>) {
   let running = false;
   const run = async () => {
     if (running) return;
