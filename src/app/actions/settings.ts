@@ -88,6 +88,27 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
   return { ok: password ? "Gespeichert, Passwort geändert." : "Gespeichert." };
 }
 
+/**
+ * Entfernt ein Mitglied endgültig – es kann sich danach nicht mehr anmelden (bestehende Sessions laufen ins Leere).
+ * Seine Leads werden freigegeben, Notizen bleiben ohne Autor erhalten, persönliche Termine werden gelöscht.
+ */
+export async function deleteUser(userId: string): Promise<SettingsState> {
+  const admin = await requireAdmin();
+  if (userId === admin.id) return { error: "Du kannst dich nicht selbst entfernen." };
+
+  const target = await db.user.findFirst({
+    where: { id: userId, tenantId: admin.tenantId },
+    select: { id: true, displayName: true, isPlatformAdmin: true },
+  });
+  if (!target) return { error: "Mitglied nicht gefunden." };
+  if (target.isPlatformAdmin) return { error: "Der Master-Account kann nicht entfernt werden." };
+
+  await db.user.delete({ where: { id: target.id } });
+  await resetCounters(admin.tenantId);
+  revalidatePath("/[tenant]", "layout");
+  return { ok: `${target.displayName} wurde entfernt.` };
+}
+
 /** Zähler zurücksetzen, damit neue Einstellungen sofort sauber greifen. */
 async function resetCounters(tenantId: string) {
   await db.user.updateMany({ where: { tenantId }, data: { distCurrent: 0 } });

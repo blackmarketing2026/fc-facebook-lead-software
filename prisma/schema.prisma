@@ -178,8 +178,9 @@ model Note {
   id        String   @id @default(cuid())
   leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  authorId  String
-  author    User     @relation(fields: [authorId], references: [id])
+  /// Leer, wenn das Mitglied entfernt wurde (die Notiz bleibt erhalten).
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
   text      String   @db.Text
   createdAt DateTime @default(now())
 
@@ -191,7 +192,7 @@ model Reminder {
   leadId     String
   lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   userId     String
-  user       User      @relation(fields: [userId], references: [id])
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   dueAt      DateTime
   type       ReminderType @default(RUECKRUF)
   durationMinutes Int     @default(15)

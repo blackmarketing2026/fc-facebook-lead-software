@@ -143,7 +143,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
               {lead.notes.map((n) => (
                 <li key={n.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                   <div className="mb-1 text-xs text-slate-500">
-                    {formatDateTime(n.createdAt)} · {n.author.displayName}
+                    {formatDateTime(n.createdAt)} · {n.author?.displayName ?? "Ehemaliges Mitglied"}
                   </div>
                   <p className="whitespace-pre-wrap text-sm">{n.text}</p>
                 </li>

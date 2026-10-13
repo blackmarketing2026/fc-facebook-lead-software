@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { CreateUserForm, EditUserForm } from "./user-forms";
+import { CreateUserForm, DeleteUserButton, EditUserForm } from "./user-forms";
 
 export const metadata = { title: "Mitglieder" };
 
@@ -9,7 +9,7 @@ export default async function UsersPage() {
   const users = await db.user.findMany({
     where: { tenantId: admin.tenantId },
     orderBy: [{ role: "asc" }, { distOrder: "asc" }],
-    select: { id: true, email: true, displayName: true, role: true, active: true, notifyNewLeadEmail: true },
+    select: { id: true, email: true, displayName: true, role: true, active: true, notifyNewLeadEmail: true, isPlatformAdmin: true },
   });
 
   return (
@@ -35,6 +35,7 @@ export default async function UsersPage() {
             </summary>
             <div className="border-t border-slate-100 p-4">
               <EditUserForm user={u} isSelf={u.id === admin.id} />
+              {u.id !== admin.id && !u.isPlatformAdmin && <DeleteUserButton userId={u.id} name={u.displayName} />}
             </div>
           </details>
         ))}

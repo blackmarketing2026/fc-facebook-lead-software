@@ -121,7 +121,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
       category: "notiz",
       title: "Notiz",
       detail: n.text,
-      user: n.author.displayName,
+      user: n.author?.displayName ?? "Ehemaliges Mitglied",
       lead: { id: n.lead.id, name: n.lead.fullName },
     });
   }
