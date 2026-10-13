@@ -60,39 +60,52 @@ export function StatusSelect({ leadId, status, commission }: { leadId: string; s
           </option>
         ))}
       </select>
-      {closing ? (
-        <form onSubmit={saveCommission} className="flex flex-wrap items-center gap-2">
-          <label className="text-sm text-slate-600" htmlFor={`commission-${leadId}`}>
-            Provision (€)
-          </label>
-          <input
-            id={`commission-${leadId}`}
-            className="input w-32"
-            inputMode="decimal"
-            placeholder="1.500,00"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-            autoFocus
-          />
-          <button disabled={pending} className="btn-primary py-1.5">
-            {pending ? "Speichern …" : "Abschluss speichern"}
+      {status === "ABGESCHLOSSEN" && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-slate-500">Provision:</span>
+          <span className="font-medium">{commission === null ? "nicht eingetragen" : formatEuro(commission)}</span>
+          <button type="button" className="text-blue-700 hover:underline" onClick={openCommission}>
+            {commission === null ? "eintragen" : "ändern"}
           </button>
-          <button type="button" className="text-sm text-slate-500 hover:text-slate-800" onClick={() => setClosing(false)}>
-            Abbrechen
-          </button>
-          {error && <p className="w-full text-sm text-red-600">{error}</p>}
-        </form>
-      ) : (
-        status === "ABGESCHLOSSEN" && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500">Provision:</span>
-            <span className="font-medium">{commission === null ? "nicht eingetragen" : formatEuro(commission)}</span>
-            <button type="button" className="text-blue-700 hover:underline" onClick={openCommission}>
-              {commission === null ? "eintragen" : "ändern"}
-            </button>
-          </div>
-        )
+        </div>
+      )}
+      {closing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <form
+            onSubmit={saveCommission}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`commission-title-${leadId}`}
+            className="card w-full max-w-sm p-6 text-left shadow-xl"
+          >
+            <div className="mb-1 text-3xl">🎉</div>
+            <h2 id={`commission-title-${leadId}`} className="text-lg font-semibold">
+              {status === "ABGESCHLOSSEN" ? "Provision ändern" : "Abschluss – bitte die Einnahme eingeben"}
+            </h2>
+            <p className="mb-4 text-sm text-slate-500">Wie hoch ist die Provisionseinnahme für diesen Lead?</p>
+            <label className="block">
+              <span className="label">Provision in €</span>
+              <input
+                className="input text-lg"
+                inputMode="decimal"
+                placeholder="1.500,00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+                autoFocus
+              />
+            </label>
+            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => setClosing(false)} disabled={pending}>
+                Abbrechen
+              </button>
+              <button disabled={pending} className="btn-primary">
+                {pending ? "Speichern …" : status === "ABGESCHLOSSEN" ? "Speichern" : "Abschluss speichern"}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

@@ -14,7 +14,8 @@ function headline(lead: NewLead) {
   return `Neuer Lead: ${name}`;
 }
 
-const POLL_MS = 15_000;
+// Nicht öfter: jede Abfrage braucht eine der wenigen Datenbankverbindungen.
+const POLL_MS = 20_000;
 
 async function showDesktopNotification(lead: NewLead) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;

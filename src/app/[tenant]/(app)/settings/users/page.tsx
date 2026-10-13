@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { deleteUser } from "@/app/actions/settings";
+import { Closings } from "@/components/closings";
 import { RemoveMemberButton } from "@/components/remove-member-button";
-import { Closings } from "./closings";
 import { CreateUserForm, EditUserForm } from "./user-forms";
 
 export const metadata = { title: "Mitglieder" };
@@ -57,7 +57,7 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
         <CreateUserForm />
       </section>
 
-      <Closings admin={admin} filter={filter} />
+      <Closings user={admin} filter={filter} path="/settings/users" />
     </div>
   );
 }

@@ -68,6 +68,7 @@ export async function closeLead(leadId: string, amountInput: string): Promise<{ 
   });
   refreshLead();
   revalidatePath("/[tenant]/settings/users", "page");
+  revalidatePath("/[tenant]/closings", "page");
   return {};
 }
 

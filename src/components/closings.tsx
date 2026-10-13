@@ -18,8 +18,12 @@ function one(v: string | string[] | undefined) {
   return typeof v === "string" ? v : undefined;
 }
 
-/** Abschnitte "Gesamteinnahmen" und "Abschlüsse" der Rubrik Mitglieder, gefiltert nach Monat oder Kalenderwoche. */
-export async function Closings({ admin, filter }: { admin: CurrentUser; filter: ClosingsFilter }) {
+/**
+ * Abschnitte "Gesamteinnahmen" und "Abschlüsse", gefiltert nach Monat oder Kalenderwoche.
+ * Admins sehen alle Abschlüsse des Dashboards mit Aufteilung pro Mitglied, Vertriebler nur ihre eigenen.
+ * path: Seite, auf der die Abschnitte stehen (für die Filter-Links).
+ */
+export async function Closings({ user, filter, path }: { user: CurrentUser; filter: ClosingsFilter; path: string }) {
   const now = new Date();
   const zeitraum = one(filter.zeitraum);
   const kind: PeriodKind | "all" = zeitraum === "week" || zeitraum === "all" ? zeitraum : "month";
@@ -29,8 +33,8 @@ export async function Closings({ admin, filter }: { admin: CurrentUser; filter: 
   // Ältere Zeiträume aus einem Link trotzdem in der Auswahl zeigen.
   if (period && !options.some((o) => o.key === period.key)) options.push(period);
 
-  const allTenants = seesAllTenants(admin);
-  const scope = { ...leadScope(admin), status: "ABGESCHLOSSEN" as const, closedAt: { not: null } };
+  const allTenants = seesAllTenants(user);
+  const scope = { ...leadScope(user), status: "ABGESCHLOSSEN" as const, closedAt: { not: null } };
   const [closings, overall] = await Promise.all([
     db.lead.findMany({
       where: { ...scope, ...(period ? { closedAt: { gte: period.from, lt: period.to } } : {}) },
@@ -61,7 +65,8 @@ export async function Closings({ admin, filter }: { admin: CurrentUser; filter: 
   }
   const members = [...byMember.values()].sort((a, b) => b.total - a.total);
 
-  const base = tenantPath(admin.tenant.slug, "/settings/users");
+  const base = tenantPath(user.tenant.slug, path);
+  const isAdmin = user.role === "ADMIN";
   const href = (k: string, p?: string) => `${base}?zeitraum=${k}${p ? `&periode=${p}` : ""}#abschluesse`;
   const periodName = period ? period.label : "Gesamter Zeitraum";
 
@@ -69,7 +74,7 @@ export async function Closings({ admin, filter }: { admin: CurrentUser; filter: 
     <>
       <section id="abschluesse" className="card scroll-mt-24 p-5">
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <h2 className="font-semibold">Gesamteinnahmen</h2>
+          <h2 className="font-semibold">{isAdmin ? "Gesamteinnahmen" : "Deine Einnahmen"}</h2>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div className="flex rounded-md border border-slate-200 p-0.5 text-sm">
               {KINDS.map((k) => (
@@ -114,7 +119,7 @@ export async function Closings({ admin, filter }: { admin: CurrentUser; filter: 
             <div className="text-sm text-slate-500">{periodName}</div>
           </div>
           <div className="rounded-lg bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Gesamteinnahmen insgesamt</div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">{isAdmin ? "Gesamteinnahmen insgesamt" : "Deine Einnahmen insgesamt"}</div>
             <div className="mt-1 text-2xl font-semibold tabular-nums">{formatEuro(overall._sum.commission?.toNumber() ?? 0)}</div>
             <div className="text-sm text-slate-500">
               {overall._count} {overall._count === 1 ? "Abschluss" : "Abschlüsse"} seit Beginn
@@ -122,7 +127,7 @@ export async function Closings({ admin, filter }: { admin: CurrentUser; filter: 
           </div>
         </div>
 
-        {members.length > 0 && (
+        {isAdmin && members.length > 0 && (
           <table className="mt-5 min-w-full text-sm">
             <thead className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -160,7 +165,7 @@ export async function Closings({ admin, filter }: { admin: CurrentUser; filter: 
                   <th className="py-2 pr-4">Datum</th>
                   <th className="py-2 pr-4">Lead</th>
                   {allTenants && <th className="py-2 pr-4">Dashboard</th>}
-                  <th className="py-2 pr-4">Mitglied</th>
+                  {isAdmin && <th className="py-2 pr-4">Mitglied</th>}
                   <th className="py-2 text-right">Provision</th>
                 </tr>
               </thead>
@@ -169,12 +174,12 @@ export async function Closings({ admin, filter }: { admin: CurrentUser; filter: 
                   <tr key={r.id}>
                     <td className="whitespace-nowrap py-2 pr-4 text-slate-600">{r.closedAt && formatDateTime(r.closedAt)}</td>
                     <td className="py-2 pr-4">
-                      <Link href={tenantPath(admin.tenant.slug, `/leads/${r.id}`)} className="font-medium text-blue-700 hover:underline">
+                      <Link href={tenantPath(user.tenant.slug, `/leads/${r.id}`)} className="font-medium text-blue-700 hover:underline">
                         {r.fullName ?? "Unbekannt"}
                       </Link>
                     </td>
                     {allTenants && <td className="py-2 pr-4 text-slate-600">{r.tenant.name}</td>}
-                    <td className="py-2 pr-4">{r.assignedTo?.displayName ?? "–"}</td>
+                    {isAdmin && <td className="py-2 pr-4">{r.assignedTo?.displayName ?? "–"}</td>}
                     <td className="py-2 text-right tabular-nums">
                       {r.amount === null ? <span className="text-amber-700">fehlt</span> : formatEuro(r.amount)}
                     </td>

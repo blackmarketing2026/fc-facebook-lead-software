@@ -19,6 +19,7 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
     { href: t("/dashboard"), label: "Dashboard" },
     { href: t("/leads"), label: "Leads" },
     { href: t("/calendar"), label: "Kalender" },
+    { href: t("/closings"), label: "Abschlüsse" },
     ...(user.role === "ADMIN"
       ? [
           { href: t("/settings/users"), label: "Mitglieder" },
