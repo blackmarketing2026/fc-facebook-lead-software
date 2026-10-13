@@ -29,7 +29,12 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
           { href: t("/log"), label: "Log" },
         ]
       : []),
-    ...(platformAdmin ? [{ href: t("/platform"), label: "Plattform" }] : []),
+    ...(platformAdmin
+      ? [
+          { href: t("/platform"), label: "Plattform" },
+          { href: t("/platform/members"), label: "Mitglieder Plattformen" },
+        ]
+      : []),
   ];
 
   return (

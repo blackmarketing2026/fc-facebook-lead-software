@@ -5,10 +5,14 @@ import { usePathname } from "next/navigation";
 
 export function NavLinks({ links }: { links: { href: string; label: string }[] }) {
   const pathname = usePathname();
+  // Nur der genaueste Treffer ist aktiv (z. B. /platform/members statt zusätzlich /platform).
+  const activeHref = links
+    .filter((l) => pathname === l.href || pathname.startsWith(l.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
   return (
     <nav className="order-last flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto">
       {links.map((l) => {
-        const active = pathname === l.href || pathname.startsWith(l.href + "/");
+        const active = l.href === activeHref;
         return (
           <Link
             key={l.href}

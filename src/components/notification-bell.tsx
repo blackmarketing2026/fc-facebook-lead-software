@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { playChime } from "@/lib/chime";
 
 type Item = {
   id: string;
@@ -78,6 +79,7 @@ export function NotificationBell() {
           upcoming.forEach((i) => seen.add(i.id));
           saveSeen(seen);
           setToasts((t) => [...upcoming, ...t].slice(0, 5));
+          playChime("reminder");
           for (const item of upcoming) await showDesktopNotification(item);
         }
       } catch {

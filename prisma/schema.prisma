@@ -147,6 +147,10 @@ model Lead {
   assignedTo    User?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
   sourceEmailId String?       @unique
   sourceEmail   InboundEmail? @relation(fields: [sourceEmailId], references: [id], onDelete: SetNull)
+  /// Provisionseinnahme in Euro, Pflicht beim Status ABGESCHLOSSEN.
+  commission    Decimal?      @db.Decimal(12, 2)
+  /// Zeitpunkt des Abschlusses (für die Auswertung nach Wochen/Monaten).
+  closedAt      DateTime?
   /// Zeitpunkt des Anlegens in der App (receivedAt ist das Mail-Datum) – für die Live-Benachrichtigung.
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -158,6 +162,7 @@ model Lead {
 
   @@index([tenantId, receivedAt])
   @@index([assignedToId, receivedAt])
+  @@index([tenantId, closedAt])
   @@index([tenantId, createdAt])
 }
 

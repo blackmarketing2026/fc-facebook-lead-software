@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   addNote,
+  closeLead,
   completeReminder,
   createReminder,
   deleteReminder,
@@ -13,25 +14,87 @@ import {
   updateStatus,
   type FormState,
 } from "@/app/actions/leads";
+import { formatEuro } from "@/lib/commission";
 import { STATUS_LABELS, STATUSES } from "@/lib/labels";
 import { DURATION_OPTIONS, formatDuration, REMINDER_LEAD_MINUTES, REMINDER_TYPE_KEYS, REMINDER_TYPES } from "@/lib/reminder-types";
 
-export function StatusSelect({ leadId, status }: { leadId: string; status: LeadStatus }) {
+/** Status-Auswahl; "Abgeschlossen" fragt die Provisionseinnahme ab (Pflicht). */
+export function StatusSelect({ leadId, status, commission }: { leadId: string; status: LeadStatus; commission: number | null }) {
   const [pending, start] = useTransition();
+  const [closing, setClosing] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function openCommission() {
+    setAmount(commission === null ? "" : commission.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setError(null);
+    setClosing(true);
+  }
+
+  function saveCommission(e: React.FormEvent) {
+    e.preventDefault();
+    start(async () => {
+      const result = await closeLead(leadId, amount);
+      if (result.error) setError(result.error);
+      else setClosing(false);
+    });
+  }
+
   return (
-    <select
-      className="input w-auto"
-      value={status}
-      disabled={pending}
-      onChange={(e) => start(() => updateStatus(leadId, e.target.value as LeadStatus))}
-      aria-label="Status"
-    >
-      {STATUSES.map((s) => (
-        <option key={s} value={s}>
-          {STATUS_LABELS[s]}
-        </option>
-      ))}
-    </select>
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      <select
+        className="input w-auto"
+        value={closing ? "ABGESCHLOSSEN" : status}
+        disabled={pending}
+        onChange={(e) => {
+          const next = e.target.value as LeadStatus;
+          if (next === "ABGESCHLOSSEN") return openCommission();
+          setClosing(false);
+          start(() => updateStatus(leadId, next));
+        }}
+        aria-label="Status"
+      >
+        {STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {STATUS_LABELS[s]}
+          </option>
+        ))}
+      </select>
+      {closing ? (
+        <form onSubmit={saveCommission} className="flex flex-wrap items-center gap-2">
+          <label className="text-sm text-slate-600" htmlFor={`commission-${leadId}`}>
+            Provision (€)
+          </label>
+          <input
+            id={`commission-${leadId}`}
+            className="input w-32"
+            inputMode="decimal"
+            placeholder="1.500,00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+            autoFocus
+          />
+          <button disabled={pending} className="btn-primary py-1.5">
+            {pending ? "Speichern …" : "Abschluss speichern"}
+          </button>
+          <button type="button" className="text-sm text-slate-500 hover:text-slate-800" onClick={() => setClosing(false)}>
+            Abbrechen
+          </button>
+          {error && <p className="w-full text-sm text-red-600">{error}</p>}
+        </form>
+      ) : (
+        status === "ABGESCHLOSSEN" && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-500">Provision:</span>
+            <span className="font-medium">{commission === null ? "nicht eingetragen" : formatEuro(commission)}</span>
+            <button type="button" className="text-blue-700 hover:underline" onClick={openCommission}>
+              {commission === null ? "eintragen" : "ändern"}
+            </button>
+          </div>
+        )
+      )}
+    </div>
   );
 }
 

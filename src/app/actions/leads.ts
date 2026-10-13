@@ -5,13 +5,16 @@ import type { LeadStatus, ReminderType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
+import { parseEuroAmount } from "@/lib/commission";
 import { parseBerlinLocal } from "@/lib/format";
 import { sendAssigneeLeadMail } from "@/lib/lead-notify-mail";
+import { sendPushToUser } from "@/lib/push";
 import { mailerConfigured } from "@/lib/mailer";
 import { sendReminderMail } from "@/lib/reminder-mail";
 import { REMINDER_TYPE_KEYS, reminderLabel } from "@/lib/reminder-types";
 import { STATUSES } from "@/lib/labels";
 import { requireAdmin, requireUser } from "@/lib/session";
+import { tenantPath } from "@/lib/tenant-paths";
 
 function refreshLead() {
   revalidatePath("/[tenant]/leads/[id]", "page");
@@ -23,6 +26,8 @@ export async function updateStatus(leadId: string, status: LeadStatus) {
   const user = await requireUser();
   await getAccessibleLeadOr404(user, leadId);
   if (!STATUSES.includes(status)) throw new Error("Ungültiger Status");
+  // Abschluss nur mit Provision (closeLead).
+  if (status === "ABGESCHLOSSEN") throw new Error("Für den Abschluss bitte die Provision angeben");
 
   const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { status: true } });
   if (lead.status === status) return;
@@ -30,10 +35,40 @@ export async function updateStatus(leadId: string, status: LeadStatus) {
     where: { id: leadId },
     data: {
       status,
+      // Wird ein Abschluss zurückgenommen, zählt er nicht mehr zu den Einnahmen.
+      commission: null,
+      closedAt: null,
       activities: { create: { type: "STATUS_CHANGED", userId: user.id, meta: { from: lead.status, to: status } } },
     },
   });
   refreshLead();
+}
+
+/** Setzt den Status "Abgeschlossen" mit Provisionseinnahme bzw. korrigiert die Provision eines Abschlusses. */
+export async function closeLead(leadId: string, amountInput: string): Promise<{ error?: string }> {
+  const user = await requireUser();
+  await getAccessibleLeadOr404(user, leadId);
+  const commission = parseEuroAmount(amountInput);
+  if (commission === null) return { error: "Bitte die Provision als Betrag eingeben, z. B. 1.500,00" };
+
+  const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { status: true, closedAt: true, commission: true } });
+  const alreadyClosed = lead.status === "ABGESCHLOSSEN";
+  await db.lead.update({
+    where: { id: leadId },
+    data: {
+      status: "ABGESCHLOSSEN",
+      commission,
+      closedAt: alreadyClosed && lead.closedAt ? lead.closedAt : new Date(),
+      activities: {
+        create: alreadyClosed
+          ? { type: "STATUS_CHANGED", userId: user.id, meta: { from: lead.status, to: lead.status, commission, previousCommission: lead.commission?.toNumber() ?? null } }
+          : { type: "STATUS_CHANGED", userId: user.id, meta: { from: lead.status, to: "ABGESCHLOSSEN", commission } },
+      },
+    },
+  });
+  refreshLead();
+  revalidatePath("/[tenant]/settings/users", "page");
+  return {};
 }
 
 export type FormState = { error?: string; ok?: boolean; message?: string } | undefined;
@@ -159,7 +194,10 @@ export async function reassignLead(leadId: string, userId: string) {
   const admin = await requireAdmin();
   await getAccessibleLeadOr404(admin, leadId);
   // Nur an Vertriebler des Dashboards, zu dem der Lead gehört (wichtig für die Gesamtansicht im Hauptaccount).
-  const { tenantId, assignedToId } = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { tenantId: true, assignedToId: true } });
+  const { tenantId, assignedToId, fullName, tenant } = await db.lead.findUniqueOrThrow({
+    where: { id: leadId },
+    select: { tenantId: true, assignedToId: true, fullName: true, tenant: { select: { slug: true } } },
+  });
   const target = await db.user.findFirst({ where: { id: userId, tenantId, active: true } });
   if (!target) throw new Error("Benutzer nicht gefunden");
 
@@ -167,8 +205,19 @@ export async function reassignLead(leadId: string, userId: string) {
     db.lead.update({ where: { id: leadId }, data: { assignedToId: userId } }),
     // Offene Rückrufe wandern mit zum neuen Vertriebler.
     db.reminder.updateMany({ where: { leadId, done: false }, data: { userId, notifiedAt: null } }),
-    db.activity.create({ data: { leadId, userId: admin.id, type: "ASSIGNED", meta: { toUserId: userId, auto: false } } }),
+    db.activity.create({ data: { leadId, userId: admin.id, type: "ASSIGNED", meta: { toUserId: userId, fromUserId: assignedToId, auto: false } } }),
   ]);
-  if (assignedToId !== userId) await sendAssigneeLeadMail(leadId).catch((err) => console.error("[mail]", err));
   refreshLead();
+  if (assignedToId === userId) return;
+
+  // Der neue Vertriebler bekommt Mail und Push; Hinweis und Neuladen im offenen Dashboard übernimmt der LeadWatcher.
+  await Promise.all([
+    sendAssigneeLeadMail(leadId).catch((err) => console.error("[mail]", err)),
+    sendPushToUser(userId, {
+      title: "Lead zugewiesen",
+      body: `${fullName ?? "Ein Lead"} wurde dir zugewiesen`,
+      url: tenantPath(tenant.slug, `/leads/${leadId}`),
+      tag: `lead-${leadId}`,
+    }).catch((err) => console.error("[push]", err)),
+  ]);
 }

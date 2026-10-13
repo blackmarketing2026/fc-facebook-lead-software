@@ -34,3 +34,29 @@ export async function emailTaken(db: Db, tenantId: string, email: string, except
   });
   return Boolean(existing);
 }
+
+/**
+ * Entfernt ein Mitglied endgültig – es kann sich danach nicht mehr anmelden (bestehende Sessions laufen ins Leere).
+ * Seine Leads werden freigegeben, Notizen bleiben ohne Autor erhalten, persönliche Termine werden gelöscht.
+ */
+export async function removeMember(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string,
+  actorId: string,
+): Promise<{ error: string } | { removed: string }> {
+  if (userId === actorId) return { error: "Du kannst dich nicht selbst entfernen." };
+  const target = await db.user.findFirst({
+    where: { id: userId, tenantId },
+    select: { id: true, displayName: true, isPlatformAdmin: true },
+  });
+  if (!target) return { error: "Mitglied nicht gefunden." };
+  if (target.isPlatformAdmin) return { error: "Der Master-Account kann nicht entfernt werden." };
+
+  await db.$transaction([
+    db.user.delete({ where: { id: target.id } }),
+    // Zähler zurücksetzen, damit die Verteilung ohne das Mitglied sauber weiterläuft.
+    db.user.updateMany({ where: { tenantId }, data: { distCurrent: 0 } }),
+  ]);
+  return { removed: target.displayName };
+}

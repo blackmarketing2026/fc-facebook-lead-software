@@ -10,7 +10,7 @@ import { FEATURE_KEYS, parseFeatures, serializeFeatures } from "@/lib/features";
 import { isValidTenantCode, nextFreeTenantCode } from "@/lib/lead-routing";
 import { createSession, requirePlatformAdmin } from "@/lib/session";
 import { isValidSlug, PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
-import { emailTaken, usernameFromEmail } from "@/lib/users";
+import { emailTaken, removeMember, usernameFromEmail } from "@/lib/users";
 
 export type PlatformState = { error?: string; ok?: string } | undefined;
 
@@ -185,6 +185,16 @@ export async function addTenantAdmin(tenantId: string, _prev: PlatformState, for
   }
   refresh(tenantId);
   return { ok: "Admin angelegt." };
+}
+
+/** Mitglied eines beliebigen Dashboards entfernen (Rubrik "Mitglieder Plattformen"). */
+export async function removeTenantMember(tenantId: string, userId: string): Promise<PlatformState> {
+  const admin = await requirePlatformAdmin();
+  const result = await removeMember(db, tenantId, userId, admin.id);
+  if ("error" in result) return result;
+  refresh(tenantId);
+  revalidatePath(`${PLATFORM}/members`);
+  return { ok: `${result.removed} wurde entfernt.` };
 }
 
 /** "Öffnen": ohne Passwort als Admin ins Kunden-Dashboard (Session gilt nur für dessen Pfad). */

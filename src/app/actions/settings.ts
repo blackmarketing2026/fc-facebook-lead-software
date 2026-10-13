@@ -12,7 +12,7 @@ import { mailerConfigured, mailerInfo, missingMailerVars, parseEmailList, sendMa
 import { sendPushToUser } from "@/lib/push";
 import { requireAdmin } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
-import { emailTaken, usernameFromEmail } from "@/lib/users";
+import { emailTaken, removeMember, usernameFromEmail } from "@/lib/users";
 
 export type SettingsState = { error?: string; ok?: string } | undefined;
 
@@ -88,25 +88,13 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
   return { ok: password ? "Gespeichert, Passwort geändert." : "Gespeichert." };
 }
 
-/**
- * Entfernt ein Mitglied endgültig – es kann sich danach nicht mehr anmelden (bestehende Sessions laufen ins Leere).
- * Seine Leads werden freigegeben, Notizen bleiben ohne Autor erhalten, persönliche Termine werden gelöscht.
- */
+/** Mitglied aus dem eigenen Dashboard entfernen (Details siehe removeMember). */
 export async function deleteUser(userId: string): Promise<SettingsState> {
   const admin = await requireAdmin();
-  if (userId === admin.id) return { error: "Du kannst dich nicht selbst entfernen." };
-
-  const target = await db.user.findFirst({
-    where: { id: userId, tenantId: admin.tenantId },
-    select: { id: true, displayName: true, isPlatformAdmin: true },
-  });
-  if (!target) return { error: "Mitglied nicht gefunden." };
-  if (target.isPlatformAdmin) return { error: "Der Master-Account kann nicht entfernt werden." };
-
-  await db.user.delete({ where: { id: target.id } });
-  await resetCounters(admin.tenantId);
+  const result = await removeMember(db, admin.tenantId, userId, admin.id);
+  if ("error" in result) return result;
   revalidatePath("/[tenant]", "layout");
-  return { ok: `${target.displayName} wurde entfernt.` };
+  return { ok: `${result.removed} wurde entfernt.` };
 }
 
 /** Zähler zurücksetzen, damit neue Einstellungen sofort sauber greifen. */

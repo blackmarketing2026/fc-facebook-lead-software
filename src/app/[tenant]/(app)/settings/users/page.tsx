@@ -1,11 +1,15 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
-import { CreateUserForm, DeleteUserButton, EditUserForm } from "./user-forms";
+import { deleteUser } from "@/app/actions/settings";
+import { RemoveMemberButton } from "@/components/remove-member-button";
+import { Closings } from "./closings";
+import { CreateUserForm, EditUserForm } from "./user-forms";
 
 export const metadata = { title: "Mitglieder" };
 
-export default async function UsersPage() {
+export default async function UsersPage(props: PageProps<"/[tenant]/settings/users">) {
   const admin = await requireAdmin();
+  const filter = await props.searchParams;
   const users = await db.user.findMany({
     where: { tenantId: admin.tenantId },
     orderBy: [{ role: "asc" }, { distOrder: "asc" }],
@@ -17,7 +21,10 @@ export default async function UsersPage() {
       <div>
         <h1 className="text-2xl font-semibold">Mitglieder</h1>
         <p className="text-sm text-slate-500">
-          Vertriebler und Admins mit Zugang zu diesem Dashboard. Vertriebler sehen nur ihre eigenen Leads.
+          Vertriebler und Admins mit Zugang zu diesem Dashboard. Vertriebler sehen nur ihre eigenen Leads.{" "}
+          <a href="#abschluesse" className="text-blue-700 hover:underline">
+            Zu Abschlüssen und Einnahmen ↓
+          </a>
         </p>
       </div>
 
@@ -35,7 +42,11 @@ export default async function UsersPage() {
             </summary>
             <div className="border-t border-slate-100 p-4">
               <EditUserForm user={u} isSelf={u.id === admin.id} />
-              {u.id !== admin.id && !u.isPlatformAdmin && <DeleteUserButton userId={u.id} name={u.displayName} />}
+              {u.id !== admin.id && !u.isPlatformAdmin && (
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <RemoveMemberButton action={deleteUser.bind(null, u.id)} name={u.displayName} />
+                </div>
+              )}
             </div>
           </details>
         ))}
@@ -45,6 +56,8 @@ export default async function UsersPage() {
         <h2 className="mb-4 font-semibold">Neues Mitglied anlegen</h2>
         <CreateUserForm />
       </section>
+
+      <Closings admin={admin} filter={filter} />
     </div>
   );
 }

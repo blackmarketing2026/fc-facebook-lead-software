@@ -3,6 +3,7 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
+import { formatEuro } from "@/lib/commission";
 import { formatDateTime, telHref, TIMEZONE, whatsappNumber } from "@/lib/format";
 import { ACTIVITY_LABELS, STATUS_LABELS } from "@/lib/labels";
 import { googleCalendarUrl } from "@/lib/ics";
@@ -32,8 +33,11 @@ function defaultDueValue(): string {
 function activityText(type: ActivityType, meta: unknown, users: Map<string, string>): string {
   const m = (meta ?? {}) as Record<string, unknown>;
   switch (type) {
-    case "STATUS_CHANGED":
-      return `Status: ${STATUS_LABELS[m.from as LeadStatus] ?? m.from} → ${STATUS_LABELS[m.to as LeadStatus] ?? m.to}${m.auto ? " (automatisch)" : ""}`;
+    case "STATUS_CHANGED": {
+      const provision = typeof m.commission === "number" ? ` · Provision ${formatEuro(m.commission)}` : "";
+      if (m.from === m.to) return `Provision geändert auf ${typeof m.commission === "number" ? formatEuro(m.commission) : "?"}`;
+      return `Status: ${STATUS_LABELS[m.from as LeadStatus] ?? m.from} → ${STATUS_LABELS[m.to as LeadStatus] ?? m.to}${m.auto ? " (automatisch)" : ""}${provision}`;
+    }
     case "ASSIGNED":
       return `Zugewiesen an ${users.get(m.toUserId as string) ?? "?"}${m.auto ? " (automatisch)" : ""}${m.test ? " – Verteilungstest" : ""}`;
     case "REMINDER_SET":
@@ -105,7 +109,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-slate-500">Status</span>
-              <StatusSelect leadId={lead.id} status={lead.status} />
+              <StatusSelect leadId={lead.id} status={lead.status} commission={lead.commission?.toNumber() ?? null} />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-slate-500">Vertriebler</span>

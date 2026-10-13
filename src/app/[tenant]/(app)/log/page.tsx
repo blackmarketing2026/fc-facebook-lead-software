@@ -1,3 +1,4 @@
+import { formatEuro } from "@/lib/commission";
 import Link from "next/link";
 import type { LeadStatus } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -101,7 +102,13 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
       category = "verarbeitung";
       detail = `an ${userName(info.toUserId)}${info.auto ? " (automatische Verteilung)" : ""}`;
     }
-    if (a.type === "STATUS_CHANGED") detail = `${statusLabel(info.from)} → ${statusLabel(info.to)}${info.auto ? " (automatisch)" : ""}`;
+    if (a.type === "STATUS_CHANGED") {
+      const provision = typeof info.commission === "number" ? ` · Provision ${formatEuro(info.commission)}` : "";
+      detail =
+        info.from === info.to
+          ? `Provision geändert${provision}`
+          : `${statusLabel(info.from)} → ${statusLabel(info.to)}${info.auto ? " (automatisch)" : ""}${provision}`;
+    }
     if ((a.type === "REMINDER_SET" || a.type === "REMINDER_DONE") && typeof info.title === "string") detail = info.title;
     entries.push({
       id: `act-${a.id}`,

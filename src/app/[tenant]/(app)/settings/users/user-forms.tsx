@@ -1,8 +1,8 @@
 "use client";
 
 import type { Role } from "@prisma/client";
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { createUser, deleteUser, updateUser, type SettingsState } from "@/app/actions/settings";
+import { useActionState, useEffect, useRef } from "react";
+import { createUser, updateUser, type SettingsState } from "@/app/actions/settings";
 
 type UserData = { id: string; email: string; displayName: string; role: Role; active: boolean; notifyNewLeadEmail: boolean };
 
@@ -84,24 +84,3 @@ export function EditUserForm({ user, isSelf }: { user: UserData; isSelf: boolean
   );
 }
 
-export function DeleteUserButton({ userId, name }: { userId: string; name: string }) {
-  const [state, setState] = useState<SettingsState>(undefined);
-  const [pending, startTransition] = useTransition();
-  function remove() {
-    const ok = window.confirm(
-      `${name} wirklich entfernen?
-
-Das Mitglied hat danach keinen Zugang mehr zum Dashboard. Seine Leads werden freigegeben (nicht zugewiesen), seine Termine gelöscht. Notizen bleiben erhalten.`,
-    );
-    if (!ok) return;
-    startTransition(async () => setState(await deleteUser(userId)));
-  }
-  return (
-    <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
-      <button type="button" onClick={remove} disabled={pending} className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50">
-        {pending ? "Entfernen …" : "Mitglied entfernen"}
-      </button>
-      <Feedback state={state} />
-    </div>
-  );
-}
