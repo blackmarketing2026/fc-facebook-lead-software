@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { createSession, deleteSession } from "@/lib/session";
 import { getTenant } from "@/lib/tenant";
-import { tenantPath } from "@/lib/tenant-paths";
+import { tenantLoginPath, tenantPath } from "@/lib/tenant-paths";
 
 export type LoginState = { error?: string } | undefined;
 
@@ -34,5 +34,5 @@ export async function logout() {
   const tenant = await getTenant();
   if (!tenant) redirect("/");
   await deleteSession(tenant.slug);
-  redirect(tenantPath(tenant.slug, "/login"));
+  redirect(tenantLoginPath(tenant.slug));
 }

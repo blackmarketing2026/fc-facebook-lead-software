@@ -19,6 +19,11 @@ export function tenantPath(slug: string, path = "/dashboard"): string {
   return `/${slug}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+/** Kurzer Login-Pfad für den Plattform-Mandanten, eigene Pfade für alle anderen. */
+export function tenantLoginPath(slug: string): string {
+  return slug === PLATFORM_TENANT_SLUG ? "/login" : tenantPath(slug, "/login");
+}
+
 /** Erste Pfad-Ebene = Mandanten-Kürzel ("/martin/leads" -> "martin"). */
 export function slugFromPath(pathname: string): string | null {
   const first = pathname.split("/")[1];

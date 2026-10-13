@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import type { Role } from "@prisma/client";
 import { db } from "./db";
-import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
+import { PLATFORM_TENANT_SLUG, tenantLoginPath, tenantPath } from "./tenant-paths";
 import { getTenant } from "./tenant";
 
 const COOKIE = "lc_session";
@@ -91,7 +91,7 @@ export async function requireUser() {
   const tenant = await getTenant();
   if (!tenant) notFound();
   const user = await getCurrentUser();
-  if (!user) redirect(tenantPath(tenant.slug, "/login"));
+  if (!user) redirect(tenantLoginPath(tenant.slug));
   // Gesperrte Dashboards: nur der Plattform-Admin kommt noch hinein.
   if (tenant.status === "SUSPENDED" && !user.operator) redirect(tenantPath(tenant.slug, "/suspended"));
   return user;

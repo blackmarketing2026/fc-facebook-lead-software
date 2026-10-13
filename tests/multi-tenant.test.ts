@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { hasFeature, parseFeatures, serializeFeatures } from "@/lib/features";
 import { parseLeadText } from "@/lib/lead-parser";
 import { nextFreeTenantCode, resolveTenantId, tenantCodeFromSubject, type RouteRule } from "@/lib/lead-routing";
-import { isValidSlug, slugFromPath, tenantPath } from "@/lib/tenant-paths";
+import { isValidSlug, slugFromPath, tenantLoginPath, tenantPath } from "@/lib/tenant-paths";
 
 const rules: RouteRule[] = [
   { tenantId: "martin", type: "RECIPIENT", pattern: "martin@function-concept.com", priority: 0 },
@@ -74,6 +74,11 @@ describe("Mandanten-Pfade", () => {
     expect(tenantPath("martin")).toBe("/martin/dashboard");
     expect(tenantPath("martin", "/leads")).toBe("/martin/leads");
     expect(tenantPath("martin", "leads/1")).toBe("/martin/leads/1");
+  });
+
+  it("verwendet den kurzen Plattform-Login und eigene Mandanten-Logins", () => {
+    expect(tenantLoginPath("function-concept")).toBe("/login");
+    expect(tenantLoginPath("martin")).toBe("/martin/login");
   });
 
   it("liest das Kürzel aus dem Pfad", () => {
