@@ -4,13 +4,14 @@ import { LeadWatcher } from "@/components/lead-watcher";
 import { NavLinks } from "@/components/nav-links";
 import { NotificationBell } from "@/components/notification-bell";
 import { PushSetup } from "@/components/push-setup";
-import { getPlatformAdmin, requireUser } from "@/lib/session";
+import { getPlatformAdmin, getPlatformManager, requireUser } from "@/lib/session";
 import { displayName } from "@/lib/tenant";
-import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
+import { tenantPath } from "@/lib/tenant-paths";
 
 export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) {
   const user = await requireUser();
   const platformAdmin = await getPlatformAdmin();
+  const platformManager = await getPlatformManager();
   const t = (path: string) => tenantPath(user.tenant.slug, path);
   // Ist Push eingerichtet, fragt schon PushSetup nach der Erlaubnis für Benachrichtigungen.
   const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
@@ -30,10 +31,10 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
           { href: t("/log"), label: "Log" },
         ]
       : []),
-    ...(platformAdmin
+    ...(platformManager
       ? [
           { href: t("/platform"), label: "Plattform" },
-          { href: t("/platform/members"), label: "Mitglieder Plattformen" },
+          ...(platformAdmin ? [{ href: t("/platform/members"), label: "Mitglieder Plattformen" }] : []),
         ]
       : []),
   ];
@@ -42,10 +43,10 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
     <div className="min-h-screen">
       {user.operator && (
         <div className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
-          Plattform-Zugriff als Function Concept ({user.displayName}) im Dashboard <strong>{user.tenant.name}</strong>
+          Plattform-Zugriff ({user.displayName}) im Dashboard <strong>{user.tenant.name}</strong>
           {user.tenant.status === "SUSPENDED" && " · Dashboard ist gesperrt"}
           {user.tenant.isDevelopment && " · Entwicklungs-Mandant"}
-          <Link href={tenantPath(PLATFORM_TENANT_SLUG, "/platform")} className="ml-3 font-medium underline">
+          <Link href={tenantPath(user.homeTenantSlug, "/platform")} className="ml-3 font-medium underline">
             Zurück zur Plattform
           </Link>
         </div>

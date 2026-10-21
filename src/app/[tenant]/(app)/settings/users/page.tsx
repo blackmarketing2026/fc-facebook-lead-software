@@ -13,7 +13,7 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
   const users = await db.user.findMany({
     where: { tenantId: admin.tenantId },
     orderBy: [{ role: "asc" }, { distOrder: "asc" }],
-    select: { id: true, email: true, displayName: true, role: true, active: true, notifyNewLeadEmail: true, isPlatformAdmin: true },
+    select: { id: true, email: true, displayName: true, role: true, active: true, notifyNewLeadEmail: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } },
   });
 
   return (
@@ -37,12 +37,13 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
                 {u.role === "ADMIN" ? "Admin" : "Vertrieb"}
               </span>
               {!u.active && <span className="badge bg-red-100 text-red-700">deaktiviert</span>}
+              {u.platformGrants.length > 0 && <span className="badge bg-blue-100 text-blue-800">Stufe 2</span>}
               <span className="ml-auto text-sm text-slate-500">{u.email}</span>
               <span className="text-slate-400 transition group-open:rotate-180">▾</span>
             </summary>
             <div className="border-t border-slate-100 p-4">
-              <EditUserForm user={u} isSelf={u.id === admin.id} />
-              {u.id !== admin.id && !u.isPlatformAdmin && (
+              {(admin.isPlatformAdmin || (!u.isPlatformAdmin && u.platformGrants.length === 0)) ? <EditUserForm user={u} isSelf={u.id === admin.id} /> : <p className="text-sm text-slate-500">Dieses Mitglied wird vom Master-Admin verwaltet.</p>}
+              {u.id !== admin.id && !u.isPlatformAdmin && (admin.isPlatformAdmin || u.platformGrants.length === 0) && (
                 <div className="mt-4 border-t border-slate-100 pt-4">
                   <RemoveMemberButton action={deleteUser.bind(null, u.id)} name={u.displayName} />
                 </div>

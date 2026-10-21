@@ -48,10 +48,14 @@ export async function removeMember(
   if (userId === actorId) return { error: "Du kannst dich nicht selbst entfernen." };
   const target = await db.user.findFirst({
     where: { id: userId, tenantId },
-    select: { id: true, displayName: true, isPlatformAdmin: true },
+    select: { id: true, displayName: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } },
   });
   if (!target) return { error: "Mitglied nicht gefunden." };
   if (target.isPlatformAdmin) return { error: "Der Master-Account kann nicht entfernt werden." };
+  if (target.platformGrants.length > 0) {
+    const actor = await db.user.findUnique({ where: { id: actorId }, select: { isPlatformAdmin: true } });
+    if (!actor?.isPlatformAdmin) return { error: "Dieses Mitglied mit Plattformrechten kann nur der Master-Admin entfernen." };
+  }
 
   await db.$transaction([
     db.user.delete({ where: { id: target.id } }),

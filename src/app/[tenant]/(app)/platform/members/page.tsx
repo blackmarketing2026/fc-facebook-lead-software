@@ -3,7 +3,8 @@ import { openTenant, removeTenantMember } from "@/app/actions/platform";
 import { RemoveMemberButton } from "@/components/remove-member-button";
 import { db } from "@/lib/db";
 import { requirePlatformAdmin } from "@/lib/session";
-import { tenantPath } from "@/lib/tenant-paths";
+import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
+import { PlatformGrantForm } from "./platform-grant-form";
 
 export const metadata = { title: "Mitglieder Plattformen" };
 
@@ -20,10 +21,13 @@ export default async function PlatformMembersPage() {
       isDevelopment: true,
       users: {
         orderBy: [{ role: "asc" }, { displayName: "asc" }],
-        select: { id: true, displayName: true, email: true, role: true, active: true, isPlatformAdmin: true },
+        select: { id: true, displayName: true, email: true, role: true, active: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } },
       },
     },
   });
+  const grantableTenants = tenants
+    .filter((tenant) => tenant.slug !== PLATFORM_TENANT_SLUG)
+    .map((tenant) => ({ id: tenant.id, name: tenant.name, code: tenant.code }));
 
   return (
     <div className="space-y-6">
@@ -74,6 +78,7 @@ export default async function PlatformMembersPage() {
                     {u.role === "ADMIN" ? "Admin" : "Vertrieb"}
                   </span>
                   {u.isPlatformAdmin && <span className="badge bg-amber-100 text-amber-800">Master</span>}
+                  {u.platformGrants.length > 0 && <span className="badge bg-blue-100 text-blue-800">Stufe 2 · {u.platformGrants.length}</span>}
                   {!u.active && <span className="badge bg-red-100 text-red-700">deaktiviert</span>}
                   <span className="text-slate-500">{u.email}</span>
                   <div className="ml-auto">
@@ -81,6 +86,13 @@ export default async function PlatformMembersPage() {
                       <RemoveMemberButton action={removeTenantMember.bind(null, t.id, u.id)} name={u.displayName} />
                     )}
                   </div>
+                  {!u.isPlatformAdmin && (
+                    <PlatformGrantForm
+                      userId={u.id}
+                      selected={u.platformGrants.map((grant) => grant.tenantId)}
+                      tenants={grantableTenants}
+                    />
+                  )}
                 </li>
               ))}
             </ul>

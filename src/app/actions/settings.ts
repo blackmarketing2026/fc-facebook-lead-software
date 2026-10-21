@@ -66,10 +66,6 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
   if (!parsed.success) return { error: firstError(parsed.error) };
 
   const active = formData.get("active") === "on";
-  if (userId === admin.id && (!active || parsed.data.role !== "ADMIN")) {
-    return { error: "Du kannst dich nicht selbst deaktivieren oder die Admin-Rolle entziehen." };
-  }
-
   const password = String(formData.get("password") ?? "");
   let passwordHash: string | undefined;
   if (password) {
@@ -78,8 +74,14 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
     passwordHash = await bcrypt.hash(pw.data, 12);
   }
 
-  const target = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId }, select: { id: true } });
+  const target = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId }, select: { id: true, role: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } } });
   if (!target) return { error: "Mitglied nicht gefunden." };
+  if (userId === admin.id && (!active || (target.role === "ADMIN" && parsed.data.role !== "ADMIN"))) {
+    return { error: "Du kannst dich nicht selbst deaktivieren oder die Admin-Rolle entziehen." };
+  }
+  if ((target.isPlatformAdmin || target.platformGrants.length > 0) && !admin.isPlatformAdmin) {
+    return { error: "Dieses Mitglied mit Plattformrechten kann nur der Master-Admin bearbeiten." };
+  }
   if (await emailTaken(db, admin.tenantId, parsed.data.email, userId)) return { error: "Diese E-Mail-Adresse ist in diesem Dashboard schon vergeben." };
 
   await db.user.update({ where: { id: userId }, data: { ...parsed.data, active, notifyNewLeadEmail: formData.get("notifyNewLeadEmail") === "on", ...(passwordHash ? { passwordHash } : {}) } });

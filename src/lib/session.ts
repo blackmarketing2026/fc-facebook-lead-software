@@ -71,18 +71,22 @@ export const getCurrentUser = cache(async () => {
       role: true,
       active: true,
       tenantId: true,
+      tenant: { select: { slug: true } },
       isPlatformAdmin: true,
+      platformGrants: { select: { tenantId: true } },
     },
   });
   if (!user?.active) return null;
 
   if (session.operator) {
-    // Plattform-Zugriff: arbeitet als Admin im Ziel-Mandanten.
-    if (!user.isPlatformAdmin) return null;
-    return { ...user, role: "ADMIN" as Role, tenantId: tenant.id, operator: true, tenant };
+    // Jede Anfrage prüft die aktuelle Freigabe erneut, auch bei bestehender Session.
+    const master = user.isPlatformAdmin && user.role === "ADMIN" && user.tenant.slug === PLATFORM_TENANT_SLUG;
+    if (!master && !user.platformGrants.some((grant) => grant.tenantId === tenant.id)) return null;
+    return { ...user, role: "ADMIN" as Role, tenantId: tenant.id, homeTenantSlug: user.tenant.slug, operator: true, tenant };
   }
   if (user.tenantId !== tenant.id) return null;
-  return { ...user, operator: false, tenant };
+  const role = user.platformGrants.some((grant) => grant.tenantId === tenant.id) ? "ADMIN" as Role : user.role;
+  return { ...user, role, homeTenantSlug: user.tenant.slug, operator: false, tenant };
 });
 
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
@@ -106,8 +110,23 @@ export async function requireAdmin() {
 /** Plattform-Bereich: nur unter /function-concept und nur mit eigenem Login (nicht per "Öffnen"). */
 export async function getPlatformAdmin() {
   const user = await getCurrentUser();
-  if (!user || user.operator || !user.isPlatformAdmin || user.tenant.slug !== PLATFORM_TENANT_SLUG) return null;
+  if (!user || user.operator || user.role !== "ADMIN" || !user.isPlatformAdmin || user.tenant.slug !== PLATFORM_TENANT_SLUG) return null;
   return user;
+}
+
+/** Master oder Mitglied mit mindestens einer zugewiesenen Plattform. */
+export async function getPlatformManager() {
+  const user = await getCurrentUser();
+  if (!user || user.operator) return null;
+  if (user.isPlatformAdmin && user.role === "ADMIN" && user.tenant.slug === PLATFORM_TENANT_SLUG) return user;
+  return user.platformGrants.length > 0 ? user : null;
+}
+
+export async function requirePlatformManager() {
+  await requireUser();
+  const manager = await getPlatformManager();
+  if (!manager) notFound();
+  return manager;
 }
 
 export async function requirePlatformAdmin() {

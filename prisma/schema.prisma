@@ -83,6 +83,7 @@ model Tenant {
   leads         Lead[]
   inboundEmails InboundEmail[]
   leadRoutes    LeadRoute[]
+  platformGrants PlatformGrant[]
 }
 
 /// Regel, nach der eine Lead-Mail aus dem zentralen Postfach einem Mandanten zugeordnet wird.
@@ -128,8 +129,21 @@ model User {
   reminders         Reminder[]
   activities        Activity[]
   pushSubscriptions PushSubscription[]
+  platformGrants    PlatformGrant[]
 
   @@unique([tenantId, username])
+}
+
+/// Admin-Zugriff eines bestehenden Mitglieds auf genau ein Kunden-Dashboard.
+model PlatformGrant {
+  userId    String
+  tenantId  String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, tenantId])
+  @@index([tenantId])
 }
 
 model Lead {

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { FEATURE_KEYS, parseFeatures, serializeFeatures } from "@/lib/features";
 import { isValidTenantCode, nextFreeTenantCode } from "@/lib/lead-routing";
-import { createSession, requirePlatformAdmin } from "@/lib/session";
+import { createSession, requirePlatformAdmin, requirePlatformManager } from "@/lib/session";
 import { isValidSlug, PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 import { emailTaken, removeMember, usernameFromEmail } from "@/lib/users";
 
@@ -197,9 +197,35 @@ export async function removeTenantMember(tenantId: string, userId: string): Prom
   return { ok: `${result.removed} wurde entfernt.` };
 }
 
+/** Master vergibt oder entzieht Stufe-2-Adminrechte für einzelne Kunden-Dashboards. */
+export async function setPlatformGrants(userId: string, _prev: PlatformState, formData: FormData): Promise<PlatformState> {
+  const master = await requirePlatformAdmin();
+  const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, isPlatformAdmin: true } });
+  if (!user || user.isPlatformAdmin || user.id === master.id) return { error: "Mitglied nicht gefunden." };
+
+  const selected = [...new Set(formData.getAll("tenantId").filter((value): value is string => typeof value === "string"))];
+  const allowed = await db.tenant.findMany({
+    where: { id: { in: selected }, slug: { not: PLATFORM_TENANT_SLUG } },
+    select: { id: true },
+  });
+  if (allowed.length !== selected.length) return { error: "Ungültige Dashboard-Auswahl." };
+
+  await db.$transaction(async (tx) => {
+    await tx.platformGrant.deleteMany({ where: { userId } });
+    if (selected.length) await tx.platformGrant.createMany({ data: selected.map((tenantId) => ({ userId, tenantId })) });
+  });
+  revalidatePath(`${PLATFORM}/members`);
+  revalidatePath("/[tenant]", "layout");
+  return { ok: selected.length ? "Plattformrechte gespeichert." : "Plattformrechte entzogen." };
+}
+
 /** "Öffnen": ohne Passwort als Admin ins Kunden-Dashboard (Session gilt nur für dessen Pfad). */
 export async function openTenant(tenantId: string) {
-  const admin = await requirePlatformAdmin();
+  const admin = await requirePlatformManager();
+  const master = admin.isPlatformAdmin && admin.tenant.slug === PLATFORM_TENANT_SLUG;
+  if (!master && !admin.platformGrants.some((grant) => grant.tenantId === tenantId)) {
+    throw new Error("Kein Zugriff auf dieses Dashboard.");
+  }
   const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId } });
   if (tenant.id !== admin.tenantId) {
     await createSession({ userId: admin.id, tenantId: tenant.id, role: "ADMIN", operator: true }, tenant.slug);

@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { openTenant } from "@/app/actions/platform";
 import { db } from "@/lib/db";
-import { requirePlatformAdmin } from "@/lib/session";
-import { tenantPath } from "@/lib/tenant-paths";
+import { requirePlatformManager } from "@/lib/session";
+import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 import { CreateTenantForm } from "./platform-forms";
 
 export const metadata = { title: "Plattform" };
 
 export default async function PlatformPage() {
-  const admin = await requirePlatformAdmin();
+  const admin = await requirePlatformManager();
+  const master = admin.isPlatformAdmin && admin.tenant.slug === PLATFORM_TENANT_SLUG;
   const tenants = await db.tenant.findMany({
+    where: master ? {} : { id: { in: admin.platformGrants.map((grant) => grant.tenantId) } },
     orderBy: { code: "asc" },
     include: { _count: { select: { leads: true, users: true } } },
   });
@@ -19,8 +21,9 @@ export default async function PlatformPage() {
       <div>
         <h1 className="text-2xl font-semibold">Plattform</h1>
         <p className="text-sm text-slate-500">
-          Alle Dashboards inklusive Entwicklungsumgebung. Jedes Dashboard ist unter seinem eigenen Pfad erreichbar, z. B.{" "}
-          <code>/martin</code>. Von hier aus anlegen, öffnen, sperren und einstellen.
+          {master
+            ? "Alle Dashboards inklusive Entwicklungsumgebung. Hier kannst du Dashboards anlegen und verwalten."
+            : "Deine freigegebenen Dashboards. Öffne eines, um es als Admin zu verwalten."}
         </p>
       </div>
 
@@ -42,9 +45,13 @@ export default async function PlatformPage() {
               <tr key={t.id} className="align-top">
                 <td className="px-4 py-3 font-mono font-semibold tabular-nums">{t.code}</td>
                 <td className="px-4 py-3">
-                  <Link href={tenantPath(admin.tenant.slug, `/platform/tenants/${t.id}`)} className="font-medium text-blue-700 hover:underline">
-                    {t.name}
-                  </Link>
+                  {master ? (
+                    <Link href={tenantPath(admin.tenant.slug, `/platform/tenants/${t.id}`)} className="font-medium text-blue-700 hover:underline">
+                      {t.name}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{t.name}</span>
+                  )}
                   <div className="mt-0.5 flex flex-wrap gap-1">
                     {t.isDevelopment && <span className="badge bg-violet-100 text-violet-800">Entwicklung</span>}
                     {t.id === admin.tenantId && <span className="badge bg-slate-900 text-white">Plattform</span>}
@@ -71,10 +78,12 @@ export default async function PlatformPage() {
         </table>
       </div>
 
-      <section className="card p-5">
-        <h2 className="mb-4 font-semibold">Neues Dashboard anlegen</h2>
-        <CreateTenantForm />
-      </section>
+      {master && (
+        <section className="card p-5">
+          <h2 className="mb-4 font-semibold">Neues Dashboard anlegen</h2>
+          <CreateTenantForm />
+        </section>
+      )}
     </div>
   );
 }
