@@ -1,23 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { testDistribution } from "@/app/actions/settings";
 
 type Props = {
-  leads: { id: string; label: string }[];
-  sales: { id: string; name: string }[];
-  next: string | null;
+  leads: { id: string; tenantId: string; label: string }[];
+  sales: { id: string; tenantId: string; name: string }[];
+  /** Wer in welchem Dashboard als Nächstes dran ist (Schlüssel: Mandanten-ID). */
+  nextByTenant: Record<string, string | null>;
 };
 
-export function DistributionTestForm({ leads, sales, next }: Props) {
+export function DistributionTestForm({ leads, sales, nextByTenant }: Props) {
   const [state, action, pending] = useActionState(testDistribution, undefined);
+  const [leadId, setLeadId] = useState("");
+  // Zugewiesen wird nur innerhalb des Dashboards, zu dem der Lead gehört.
+  const tenantId = leads.find((l) => l.id === leadId)?.tenantId;
+  const tenantSales = sales.filter((u) => u.tenantId === tenantId);
+  const next = tenantId ? nextByTenant[tenantId] : null;
   return (
     <form action={action} className="space-y-4">
       <div className="grid gap-3 lg:grid-cols-2">
         <label className="block">
           <span className="label">Lead</span>
-          <select name="leadId" required className="input" defaultValue="">
+          <select name="leadId" required className="input" value={leadId} onChange={(e) => setLeadId(e.target.value)}>
             <option value="" disabled>
               Lead auswählen …
             </option>
@@ -30,9 +36,9 @@ export function DistributionTestForm({ leads, sales, next }: Props) {
         </label>
         <label className="block">
           <span className="label">Zuweisen an</span>
-          <select name="target" className="input" defaultValue="auto">
+          <select key={tenantId} name="target" className="input" defaultValue="auto">
             <option value="auto">Automatisch laut Verteilung{next ? ` (als Nächstes: ${next})` : ""}</option>
-            {sales.map((u) => (
+            {tenantSales.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
               </option>

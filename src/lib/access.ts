@@ -12,6 +12,11 @@ export function seesAllTenants(user: ScopeUser): boolean {
   return user.role === "ADMIN" && user.isPlatformAdmin && !user.operator && user.tenant.slug === PLATFORM_TENANT_SLUG;
 }
 
+/** Mandanten-Filter für Admin-Bereiche (Log, Postfach, Verteilungstest): der Master sieht alle Dashboards. */
+export function tenantFilter(user: ScopeUser): { tenantId?: string } {
+  return seesAllTenants(user) ? {} : { tenantId: user.tenantId };
+}
+
 /** Nur Leads des eigenen Mandanten; Vertriebler sehen davon nur ihre eigenen, der Admin alle. */
 export function leadScope(user: ScopeUser): Prisma.LeadWhereInput {
   if (seesAllTenants(user)) return {};

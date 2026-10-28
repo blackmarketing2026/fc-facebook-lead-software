@@ -52,7 +52,7 @@ export function CreateTenantForm() {
     <form action={action} className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_8rem]">
         <label className="block">
-          <span className="label">Name des Dashboards</span>
+          <span className="label">Name der Plattform</span>
           <input name="name" required className="input" placeholder="Martin Versicherungsmakler" />
         </label>
         <label className="block">
@@ -91,7 +91,7 @@ export function CreateTenantForm() {
       </label>
       <Feedback state={state} />
       <button disabled={pending} className="btn-primary">
-        {pending ? "Anlegen …" : "Dashboard anlegen"}
+        {pending ? "Anlegen …" : "Plattform anlegen"}
       </button>
     </form>
   );

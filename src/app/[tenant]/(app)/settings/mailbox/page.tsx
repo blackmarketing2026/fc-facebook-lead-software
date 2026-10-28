@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { seesAllTenants, tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
@@ -12,17 +13,18 @@ type LastRun = { at: string; ok: boolean; processed?: number; ignored?: number; 
 
 export default async function MailboxPage() {
   const admin = await requireAdmin();
-  const tenantId = admin.tenantId;
+  const scope = tenantFilter(admin);
+  const allTenants = seesAllTenants(admin);
   const [lastRunSetting, mails, counts, routes] = await Promise.all([
     db.setting.findUnique({ where: { key: "imap.lastRun" } }),
     db.inboundEmail.findMany({
-      where: { tenantId },
+      where: scope,
       orderBy: { receivedAt: "desc" },
       take: 50,
-      include: { lead: { select: { id: true, fullName: true } } },
+      include: { lead: { select: { id: true, fullName: true } }, tenant: { select: { name: true } } },
     }),
-    db.inboundEmail.groupBy({ by: ["status"], where: { tenantId }, _count: true }),
-    db.leadRoute.findMany({ where: { tenantId }, orderBy: { priority: "desc" } }),
+    db.inboundEmail.groupBy({ by: ["status"], where: scope, _count: true }),
+    db.leadRoute.findMany({ where: scope, orderBy: { priority: "desc" }, include: { tenant: { select: { name: true } } } }),
   ]);
   const lastRun: LastRun | null = lastRunSetting ? JSON.parse(lastRunSetting.value) : null;
   const count = (s: string) => counts.find((c) => c.status === s)?._count ?? 0;
@@ -31,7 +33,7 @@ export default async function MailboxPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Postfach</h1>
+        <h1 className="text-2xl font-semibold">{allTenants ? "Postfächer" : "Postfach"}</h1>
         <p className="text-sm text-slate-500">
           Das zentrale Lead-Postfach wird regelmäßig abgerufen. Jede Mail mit einem gültigen Lead-JSON wird als Lead
           angelegt und über die Zuordnungsregeln dem richtigen Dashboard zugewiesen.
@@ -39,11 +41,11 @@ export default async function MailboxPage() {
         <p className="mt-2 text-sm text-slate-600">
           {routes.length > 0 ? (
             <>
-              Leads landen in diesem Dashboard bei:{" "}
+              {allTenants ? "Zuordnungsregeln aller Plattformen:" : "Leads landen in diesem Dashboard bei:"}{" "}
               {routes.map((r, i) => (
                 <span key={r.id}>
                   {i > 0 && " · "}
-                  {ROUTE_TYPE_LABELS[r.type]} <code className="rounded bg-slate-100 px-1">{r.pattern}</code>
+                  {allTenants && <strong>{r.tenant.name}: </strong>}{ROUTE_TYPE_LABELS[r.type]} <code className="rounded bg-slate-100 px-1">{r.pattern}</code>
                 </span>
               ))}
             </>
@@ -98,6 +100,7 @@ export default async function MailboxPage() {
           <thead className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Eingang</th>
+              {allTenants && <th className="px-4 py-3">Plattform</th>}
               <th className="px-4 py-3">Absender / Betreff</th>
               <th className="px-4 py-3">Ergebnis</th>
               <th className="px-4 py-3"></th>
@@ -106,7 +109,7 @@ export default async function MailboxPage() {
           <tbody className="divide-y divide-slate-100">
             {mails.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={allTenants ? 5 : 4} className="px-4 py-8 text-center text-slate-500">
                   Noch keine Mails verarbeitet.
                 </td>
               </tr>
@@ -114,6 +117,7 @@ export default async function MailboxPage() {
             {mails.map((m) => (
               <tr key={m.id} className="align-top">
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDateTime(m.receivedAt)}</td>
+                {allTenants && <td className="whitespace-nowrap px-4 py-3 text-slate-600">{m.tenant?.name ?? "nicht zugeordnet"}</td>}
                 <td className="max-w-md px-4 py-3">
                   <div className="truncate">{m.from}</div>
                   <div className="truncate text-xs text-slate-500">{m.subject}</div>

@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
 import { assignNextSalesUser } from "@/lib/distribution";
 import { buildLeadMail, sendAssigneeLeadMail } from "@/lib/lead-notify-mail";
@@ -130,9 +131,32 @@ export async function saveDistribution(entries: unknown): Promise<SettingsState>
   return { ok: "Verteilung gespeichert." };
 }
 
+export async function setDistributionPaused(paused: boolean): Promise<SettingsState> {
+  const admin = await requireAdmin();
+  await db.tenant.update({ where: { id: admin.tenantId }, data: { distributionPaused: paused } });
+  revalidatePath("/[tenant]/settings/distribution", "page");
+  return { ok: paused ? "Automatische Verteilung gestoppt." : "Automatische Verteilung gestartet." };
+}
+
+export async function setSalesAbsence(userId: string, _prev: SettingsState, formData: FormData): Promise<SettingsState> {
+  const admin = await requireAdmin();
+  const member = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId, role: "SALES" } });
+  if (!member) return { error: "Vertriebler nicht gefunden." };
+  const reason = String(formData.get("reason") ?? "");
+  if (!["", "URLAUB", "KRANK"].includes(reason)) return { error: "Ungültiger Status." };
+  const substituteId = String(formData.get("substituteId") ?? "");
+  if (reason && substituteId) {
+    const substitute = await db.user.findFirst({ where: { id: substituteId, tenantId: admin.tenantId, role: "SALES", active: true, distPaused: false, absenceReason: null } });
+    if (!substitute || substitute.id === member.id) return { error: "Vertretung ist nicht verfügbar." };
+  }
+  await db.user.update({ where: { id: userId }, data: { absenceReason: reason || null, substituteId: reason ? substituteId || null : null, distPaused: Boolean(reason), distCurrent: 0 } });
+  revalidatePath("/[tenant]/settings/distribution", "page");
+  return { ok: "Abwesenheit gespeichert." };
+}
+
 export async function reprocessInboundAction(inboundId: string): Promise<SettingsState> {
   const admin = await requireAdmin();
-  const inbound = await db.inboundEmail.findFirst({ where: { id: inboundId, tenantId: admin.tenantId }, select: { id: true } });
+  const inbound = await db.inboundEmail.findFirst({ where: { id: inboundId, ...tenantFilter(admin) }, select: { id: true } });
   if (!inbound) return { error: "Mail nicht gefunden." };
   const result = await reprocessInbound(inboundId);
   revalidatePath("/[tenant]/settings/mailbox", "page");
@@ -216,14 +240,15 @@ export async function testDistribution(_prev: DistributionTestState, formData: F
   const admin = await requireAdmin();
   const leadId = String(formData.get("leadId") ?? "");
   const target = String(formData.get("target") ?? "auto");
-  const lead = await db.lead.findFirst({ where: { id: leadId, tenantId: admin.tenantId }, select: { id: true, fullName: true } });
+  const lead = await db.lead.findFirst({ where: { id: leadId, ...tenantFilter(admin) }, select: { id: true, fullName: true, tenantId: true } });
   if (!lead) return { ok: false, error: "Bitte einen Lead auswählen." };
 
+  // Verteilt wird immer in dem Dashboard, zu dem der Lead gehört (beim Master also nicht zwingend im eigenen).
   const auto = target === "auto";
   const assignedToId = await db.$transaction(async (tx) => {
     const userId = auto
-      ? await assignNextSalesUser(tx, admin.tenantId)
-      : (await tx.user.findFirst({ where: { id: target, tenantId: admin.tenantId, role: "SALES", active: true }, select: { id: true } }))?.id ?? null;
+      ? await assignNextSalesUser(tx, lead.tenantId)
+      : (await tx.user.findFirst({ where: { id: target, tenantId: lead.tenantId, role: "SALES", active: true }, select: { id: true } }))?.id ?? null;
     if (!userId) return null;
     await tx.lead.update({ where: { id: lead.id }, data: { assignedToId: userId } });
     await tx.reminder.updateMany({ where: { leadId: lead.id, done: false }, data: { userId, notifiedAt: null } });

@@ -4,6 +4,7 @@ import { LeadWatcher } from "@/components/lead-watcher";
 import { NavLinks } from "@/components/nav-links";
 import { NotificationBell } from "@/components/notification-bell";
 import { PushSetup } from "@/components/push-setup";
+import { seesAllTenants } from "@/lib/access";
 import { getPlatformAdmin, getPlatformManager, requireUser } from "@/lib/session";
 import { displayName } from "@/lib/tenant";
 import { tenantPath } from "@/lib/tenant-paths";
@@ -16,6 +17,23 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
   // Ist Push eingerichtet, fragt schon PushSetup nach der Erlaubnis für Benachrichtigungen.
   const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
   const pushEnabled = Boolean(vapid) && !vapid.startsWith("PLATZHALTER");
+  // Master-Account: schlankes Menü für die Übersicht über alle Plattformen, Seltenes unter „Mehr“.
+  const master = seesAllTenants(user);
+  const masterLinks = [
+    { href: t("/platform"), label: "Plattformen" },
+    { href: t("/leads"), label: "Leads" },
+    { href: t("/platform/members"), label: "Mitglieder" },
+    { href: t("/settings/mailbox"), label: "Postfächer" },
+    { href: t("/settings/distribution-test"), label: "Verteilungstest" },
+    { href: t("/log"), label: "Log" },
+  ];
+  const masterMore = [
+    { href: t("/dashboard"), label: "Dashboard" },
+    { href: t("/calendar"), label: "Kalender" },
+    { href: t("/closings"), label: "Abschlüsse" },
+    { href: t("/settings/distribution"), label: "Verteilung" },
+    { href: t("/settings/notifications"), label: "Benachrichtigungen" },
+  ];
   const links = [
     { href: t("/dashboard"), label: "Dashboard" },
     { href: t("/leads"), label: "Leads" },
@@ -56,7 +74,7 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
           <Link href={t("/dashboard")} className="font-semibold text-slate-900">
             {displayName(user.tenant)}
           </Link>
-          <NavLinks links={links} />
+          {master ? <NavLinks links={masterLinks} more={masterMore} /> : <NavLinks links={links} />}
           <div className="ml-auto flex items-center gap-3">
             <NotificationBell />
             <span className="hidden text-sm text-slate-600 sm:inline">

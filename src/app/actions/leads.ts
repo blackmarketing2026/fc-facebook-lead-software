@@ -222,3 +222,16 @@ export async function reassignLead(leadId: string, userId: string) {
     }).catch((err) => console.error("[push]", err)),
   ]);
 }
+
+/** Entfernt die Bearbeitungshistorie und stellt den Lead als neu und unzugewiesen bereit. */
+export async function resetLead(leadId: string) {
+  const admin = await requireAdmin();
+  await getAccessibleLeadOr404(admin, leadId);
+  await db.$transaction(async (tx) => {
+    await tx.note.deleteMany({ where: { leadId } });
+    await tx.reminder.deleteMany({ where: { leadId } });
+    await tx.activity.deleteMany({ where: { leadId } });
+    await tx.lead.update({ where: { id: leadId }, data: { status: "NEU", assignedToId: null, commission: null, closedAt: null, createdAt: new Date() } });
+  });
+  refreshLead();
+}

@@ -1,5 +1,6 @@
 import type { ActivityType, LeadStatus, ReminderType } from "@prisma/client";
 import Link from "next/link";
+import { ResetLeadButton } from "@/components/reset-lead-button";
 import { StatusBadge } from "@/components/status-badge";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
@@ -89,6 +90,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
       </div>
 
       <section className="card p-5">
+        {user.role === "ADMIN" && <div className="mb-4"><ResetLeadButton leadId={lead.id} /><p className="mt-1 text-xs text-slate-500">Löscht die gesamte Bearbeitungshistorie. Anschließend kannst du den Lead oben neu zuweisen.</p></div>}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">{lead.fullName || "Unbekannt"}</h1>

@@ -9,6 +9,14 @@ body {
   @apply bg-slate-50 text-slate-900;
 }
 
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px !important; }
+  button, a.btn-primary, a.btn-secondary, a.btn-danger { min-height: 44px; }
+  .card { max-width: 100%; }
+  table { min-width: 600px; }
+  main { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+}
+
 @utility label {
     @apply mb-1 block text-sm font-medium text-slate-700;
 }

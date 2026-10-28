@@ -1,6 +1,7 @@
 import { formatEuro } from "@/lib/commission";
 import Link from "next/link";
 import type { LeadStatus } from "@prisma/client";
+import { seesAllTenants, tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { ACTIVITY_LABELS, STATUS_LABELS } from "@/lib/labels";
@@ -27,6 +28,7 @@ type Entry = {
   detail?: string | null;
   tone?: "ok" | "error";
   user?: string | null;
+  platform?: string | null;
   lead?: { id: string; name: string | null } | null;
 };
 
@@ -38,35 +40,36 @@ function statusLabel(value: unknown): string {
   return STATUS_LABELS[value as LeadStatus] ?? String(value ?? "?");
 }
 
-/** Protokoll des Dashboards: eingehende Mails, Verarbeitung, Statusänderungen und Notizen in einer Zeitleiste. */
+/** Protokoll des Dashboards (Master: aller Plattformen): eingehende Mails, Verarbeitung, Statusänderungen und Notizen in einer Zeitleiste. */
 export default async function LogPage(props: PageProps<"/[tenant]/log">) {
   const admin = await requireAdmin();
-  const tenantId = admin.tenantId;
+  const scope = tenantFilter(admin);
+  const allTenants = seesAllTenants(admin);
   const base = tenantPath(admin.tenant.slug, "/log");
   const sp = await props.searchParams;
   const filter = typeof sp.typ === "string" && sp.typ in CATEGORIES ? (sp.typ as Category) : null;
 
   const [mails, activities, notes, users] = await Promise.all([
     db.inboundEmail.findMany({
-      where: { tenantId },
+      where: scope,
       orderBy: { receivedAt: "desc" },
       take: LIMIT,
-      select: { id: true, receivedAt: true, from: true, subject: true, status: true, error: true, lead: { select: { id: true, fullName: true } } },
+      select: { id: true, receivedAt: true, from: true, subject: true, status: true, error: true, tenant: { select: { name: true } }, lead: { select: { id: true, fullName: true } } },
     }),
     db.activity.findMany({
       // Notizen kommen mit Text aus der Notiz-Tabelle, daher hier ausgelassen.
-      where: { lead: { tenantId }, type: { not: "NOTE_ADDED" } },
+      where: { lead: scope, type: { not: "NOTE_ADDED" } },
       orderBy: { createdAt: "desc" },
       take: LIMIT,
-      include: { user: { select: { displayName: true } }, lead: { select: { id: true, fullName: true, sourceEmailId: true } } },
+      include: { user: { select: { displayName: true } }, lead: { select: { id: true, fullName: true, sourceEmailId: true, tenant: { select: { name: true } } } } },
     }),
     db.note.findMany({
-      where: { lead: { tenantId } },
+      where: { lead: scope },
       orderBy: { createdAt: "desc" },
       take: LIMIT,
-      include: { author: { select: { displayName: true } }, lead: { select: { id: true, fullName: true } } },
+      include: { author: { select: { displayName: true } }, lead: { select: { id: true, fullName: true, tenant: { select: { name: true } } } } },
     }),
-    db.user.findMany({ where: { tenantId }, select: { id: true, displayName: true } }),
+    db.user.findMany({ where: scope, select: { id: true, displayName: true } }),
   ]);
   const userName = (id: unknown) => users.find((u) => u.id === id)?.displayName ?? "unbekannt";
 
@@ -79,6 +82,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
       category: "eingang",
       title: "Mail eingegangen",
       detail: [m.subject, m.from].filter(Boolean).join(" · "),
+      platform: m.tenant?.name ?? "nicht zugeordnet",
     });
     entries.push({
       id: `mail-done-${m.id}`,
@@ -87,6 +91,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
       title: m.status === "PROCESSED" ? "Lead angelegt" : m.status === "FAILED" ? "Verarbeitung fehlgeschlagen" : "Kein Lead erkannt (ignoriert)",
       detail: m.error,
       tone: m.status === "PROCESSED" ? "ok" : "error",
+      platform: m.tenant?.name ?? "nicht zugeordnet",
       lead: m.lead ? { id: m.lead.id, name: m.lead.fullName } : null,
     });
   }
@@ -117,6 +122,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
       title: ACTIVITY_LABELS[a.type],
       detail,
       user: a.user?.displayName,
+      platform: a.lead.tenant.name,
       lead: { id: a.lead.id, name: a.lead.fullName },
     });
   }
@@ -129,6 +135,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
       title: "Notiz",
       detail: n.text,
       user: n.author?.displayName ?? "Ehemaliges Mitglied",
+      platform: n.lead.tenant.name,
       lead: { id: n.lead.id, name: n.lead.fullName },
     });
   }
@@ -145,7 +152,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
       <div>
         <h1 className="text-2xl font-semibold">Log</h1>
         <p className="text-sm text-slate-500">
-          Alles, was in diesem Dashboard passiert: eingehende Lead-Mails, ihre Verarbeitung, Zuweisungen,
+          {allTenants ? "Alles, was in allen Plattformen passiert:" : "Alles, was in diesem Dashboard passiert:"} eingehende Lead-Mails, ihre Verarbeitung, Zuweisungen,
           Statusänderungen und Notizen – die neuesten {LIMIT} Einträge.
         </p>
       </div>
@@ -166,6 +173,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Zeit</th>
+              {allTenants && <th className="px-4 py-3">Plattform</th>}
               <th className="px-4 py-3">Art</th>
               <th className="px-4 py-3">Ereignis</th>
               <th className="px-4 py-3">Lead</th>
@@ -175,7 +183,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
           <tbody className="divide-y divide-slate-100">
             {shown.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={allTenants ? 6 : 5} className="px-4 py-8 text-center text-slate-500">
                   Noch keine Einträge.
                 </td>
               </tr>
@@ -183,6 +191,7 @@ export default async function LogPage(props: PageProps<"/[tenant]/log">) {
             {shown.map((e) => (
               <tr key={e.id} className="align-top">
                 <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-600">{formatDateTime(e.at)}</td>
+                {allTenants && <td className="whitespace-nowrap px-4 py-3 text-slate-600">{e.platform}</td>}
                 <td className="px-4 py-3">
                   <span className={`badge ${CATEGORIES[e.category].color}`}>{CATEGORIES[e.category].label}</span>
                 </td>

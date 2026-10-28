@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deleteRoute, openTenant, setTenantStatus } from "@/app/actions/platform";
+import { deleteRoute, openTenant, setTenantStatus, setTenantMaster } from "@/app/actions/platform";
 import { db } from "@/lib/db";
 import { FEATURES, parseFeatures } from "@/lib/features";
 import { formatDateTime } from "@/lib/format";
@@ -20,7 +20,7 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
       leadRoutes: { orderBy: [{ priority: "desc" }, { createdAt: "asc" }] },
       users: {
         orderBy: [{ role: "asc" }, { displayName: "asc" }],
-        select: { id: true, displayName: true, email: true, role: true, active: true },
+        select: { id: true, displayName: true, email: true, role: true, active: true, isTenantMaster: true },
       },
       _count: { select: { leads: true } },
     },
@@ -121,12 +121,13 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
 
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Nutzer</h2>
+        {!isPlatform && <div className="mb-5 rounded-lg bg-blue-50 p-4"><h3 className="font-semibold">Plattform-Master</h3><p className="mb-3 text-sm text-slate-600">Verwaltet Mitglieder, Status und Lead-Verteilung nur in dieser Plattform. Der Hauptmaster-Zugang bleibt getrennt.</p><form action={async (formData) => { "use server"; await setTenantMaster(tenant.id, String(formData.get("userId") || "") || null); }} className="flex flex-wrap gap-2"><select name="userId" defaultValue={tenant.users.find((u) => u.isTenantMaster)?.id ?? ""} className="input max-w-sm"><option value="">Kein Plattform-Master</option>{tenant.users.filter((u) => u.active).map((u) => <option key={u.id} value={u.id}>{u.displayName} ({u.email})</option>)}</select><button className="btn-primary">Speichern</button></form></div>}
         <ul className="mb-5 divide-y divide-slate-100 text-sm">
           {tenant.users.map((u) => (
             <li key={u.id} className="flex flex-wrap items-center gap-3 py-2">
               <span className="font-medium">{u.displayName}</span>
               <span className={`badge ${u.role === "ADMIN" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}>
-                {u.role === "ADMIN" ? "Admin" : "Vertrieb"}
+                {u.isTenantMaster ? "Plattform-Master" : u.role === "ADMIN" ? "Admin" : "Vertrieb"}
               </span>
               {!u.active && <span className="badge bg-red-100 text-red-700">deaktiviert</span>}
               <span className="ml-auto text-slate-500">{u.email}</span>

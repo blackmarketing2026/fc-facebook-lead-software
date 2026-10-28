@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { seesAllTenants, tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
 import { previewSequence } from "@/lib/distribution";
 import { formatDateTime } from "@/lib/format";
@@ -11,19 +12,22 @@ export const metadata = { title: "Verteilungstest" };
 
 export default async function DistributionTestPage() {
   const admin = await requireAdmin();
-  const tenantId = admin.tenantId;
+  const scope = tenantFilter(admin);
+  const allTenants = seesAllTenants(admin);
   const [leads, sales] = await Promise.all([
     db.lead.findMany({
-      where: { tenantId },
+      where: scope,
       orderBy: { receivedAt: "desc" },
       take: 100,
-      select: { id: true, fullName: true, receivedAt: true, assignedTo: { select: { displayName: true } } },
+      select: { id: true, tenantId: true, fullName: true, receivedAt: true, assignedTo: { select: { displayName: true } }, tenant: { select: { name: true } } },
     }),
     db.user.findMany({
-      where: { tenantId, role: "SALES" },
+      where: { ...scope, role: "SALES" },
       orderBy: { distOrder: "asc" },
       select: {
         id: true,
+        tenantId: true,
+        tenant: { select: { name: true } },
         displayName: true,
         email: true,
         active: true,
@@ -36,9 +40,13 @@ export default async function DistributionTestPage() {
     }),
   ]);
   const inRotation = sales.filter((u) => u.active && !u.distPaused);
-  // Wer als Nächstes dran wäre – mit den echten aktuellen Zählern, ohne etwas zu speichern.
-  const nextId = previewSequence(inRotation, 1)[0];
-  const next = sales.find((u) => u.id === nextId)?.displayName ?? null;
+  // Wer als Nächstes dran wäre – mit den echten aktuellen Zählern, ohne etwas zu speichern. Pro Dashboard getrennt.
+  const nextIds = new Map<string, string>();
+  for (const tid of new Set(inRotation.map((u) => u.tenantId))) {
+    const id = previewSequence(inRotation.filter((u) => u.tenantId === tid), 1)[0];
+    if (id) nextIds.set(tid, id);
+  }
+  const nameOf = (id: string | undefined) => sales.find((u) => u.id === id)?.displayName ?? null;
 
   return (
     <div className="space-y-6">
@@ -60,7 +68,7 @@ export default async function DistributionTestPage() {
         <h2 className="mb-3 font-semibold">Lead zuweisen & benachrichtigen</h2>
         {leads.length === 0 ? (
           <p className="text-sm text-slate-500">
-            Noch keine Leads in diesem Dashboard. Lege unter{" "}
+            Noch keine Leads vorhanden. Lege unter{" "}
             <Link href={tenantPath(admin.tenant.slug, "/settings/mailbox")} className="text-blue-700 underline">
               Postfach
             </Link>{" "}
@@ -70,10 +78,11 @@ export default async function DistributionTestPage() {
           <DistributionTestForm
             leads={leads.map((l) => ({
               id: l.id,
-              label: `${l.fullName ?? "Unbekannt"} · ${formatDateTime(l.receivedAt)} · ${l.assignedTo?.displayName ?? "nicht zugewiesen"}`,
+              tenantId: l.tenantId,
+              label: `${allTenants ? `${l.tenant.name} · ` : ""}${l.fullName ?? "Unbekannt"} · ${formatDateTime(l.receivedAt)} · ${l.assignedTo?.displayName ?? "nicht zugewiesen"}`,
             }))}
-            sales={inRotation.map((u) => ({ id: u.id, name: u.displayName }))}
-            next={next}
+            sales={inRotation.map((u) => ({ id: u.id, tenantId: u.tenantId, name: u.displayName }))}
+            nextByTenant={Object.fromEntries([...nextIds].map(([tid, id]) => [tid, nameOf(id)]))}
           />
         )}
       </section>
@@ -83,6 +92,7 @@ export default async function DistributionTestPage() {
         <table className="mt-3 min-w-full text-sm">
           <thead className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              {allTenants && <th className="px-4 py-3">Plattform</th>}
               <th className="px-4 py-3">Vertriebler</th>
               <th className="px-4 py-3">E-Mail</th>
               <th className="px-4 py-3">In der Verteilung</th>
@@ -92,16 +102,17 @@ export default async function DistributionTestPage() {
           <tbody className="divide-y divide-slate-100">
             {sales.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={allTenants ? 5 : 4} className="px-4 py-6 text-center text-slate-500">
                   Noch keine Vertriebler angelegt.
                 </td>
               </tr>
             )}
             {sales.map((u) => (
               <tr key={u.id}>
+                {allTenants && <td className="whitespace-nowrap px-4 py-3 text-slate-600">{u.tenant.name}</td>}
                 <td className="px-4 py-3 font-medium">
                   {u.displayName}
-                  {u.id === nextId && <span className="badge ml-2 bg-blue-100 text-blue-800">als Nächstes dran</span>}
+                  {nextIds.get(u.tenantId) === u.id && <span className="badge ml-2 bg-blue-100 text-blue-800">als Nächstes dran</span>}
                 </td>
                 <td className="px-4 py-3 text-slate-600">{u.email}</td>
                 <td className="px-4 py-3">
@@ -117,7 +128,7 @@ export default async function DistributionTestPage() {
                   {u.notifyNewLeadEmail ? (
                     <span className="text-green-700">✓ an</span>
                   ) : (
-                    <Link href={tenantPath(admin.tenant.slug, "/settings/users")} className="text-amber-700 underline">
+                    <Link href={tenantPath(admin.tenant.slug, allTenants ? "/platform/members" : "/settings/users")} className="text-amber-700 underline">
                       aus – unter Mitglieder einschalten
                     </Link>
                   )}

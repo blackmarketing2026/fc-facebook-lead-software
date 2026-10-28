@@ -5,7 +5,7 @@ import { requirePlatformManager } from "@/lib/session";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 import { CreateTenantForm } from "./platform-forms";
 
-export const metadata = { title: "Plattform" };
+export const metadata = { title: "Plattformen" };
 
 export default async function PlatformPage() {
   const admin = await requirePlatformManager();
@@ -19,11 +19,11 @@ export default async function PlatformPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Plattform</h1>
+        <h1 className="text-2xl font-semibold">Plattformen</h1>
         <p className="text-sm text-slate-500">
           {master
-            ? "Alle Dashboards inklusive Entwicklungsumgebung. Hier kannst du Dashboards anlegen und verwalten."
-            : "Deine freigegebenen Dashboards. Öffne eines, um es als Admin zu verwalten."}
+            ? "Alle Plattformen inklusive Entwicklungsumgebung. Hier legst du weitere Plattformen an und verwaltest sie."
+            : "Deine freigegebenen Plattformen. Öffne eine, um sie als Admin zu verwalten."}
         </p>
       </div>
 
@@ -32,7 +32,7 @@ export default async function PlatformPage() {
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Dashboard</th>
+              <th className="px-4 py-3">Plattform</th>
               <th className="px-4 py-3">Adresse</th>
               <th className="px-4 py-3 text-right">Leads</th>
               <th className="px-4 py-3 text-right">Nutzer</th>
@@ -80,7 +80,7 @@ export default async function PlatformPage() {
 
       {master && (
         <section className="card p-5">
-          <h2 className="mb-4 font-semibold">Neues Dashboard anlegen</h2>
+          <h2 className="mb-4 font-semibold">Neue Plattform anlegen</h2>
           <CreateTenantForm />
         </section>
       )}

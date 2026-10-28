@@ -76,6 +76,7 @@ model Tenant {
   features      String       @default("") @db.VarChar(1000)
   /// E-Mail-Adressen (kommagetrennt), die bei jedem neuen Lead benachrichtigt werden.
   leadNotifyEmails String    @default("") @db.VarChar(1000)
+  distributionPaused Boolean @default(false)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -120,6 +121,9 @@ model User {
   distOrder       Int      @default(0)
   distWeight      Int      @default(1)
   distPaused      Boolean  @default(false)
+  absenceReason   String?  @db.VarChar(20)
+  substituteId    String?
+  isTenantMaster  Boolean  @default(false)
   distCurrent     Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

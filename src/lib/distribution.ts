@@ -52,6 +52,8 @@ export function previewSequence(candidates: DistCandidate[], n: number): string[
  * Die Zeilen werden mit FOR UPDATE gesperrt, damit parallele Leads sich nicht überschneiden.
  */
 export async function assignNextSalesUser(tx: Prisma.TransactionClient, tenantId: string): Promise<string | null> {
+  const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { distributionPaused: true } });
+  if (tenant?.distributionPaused) return null;
   const rows = await tx.$queryRaw<DistCandidate[]>`
     SELECT id, distOrder, distWeight, distCurrent
     FROM User

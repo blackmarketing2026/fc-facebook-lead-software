@@ -187,6 +187,23 @@ export async function addTenantAdmin(tenantId: string, _prev: PlatformState, for
   return { ok: "Admin angelegt." };
 }
 
+/** Der Hauptmaster bestimmt genau einen lokalen Master je Plattform. */
+export async function setTenantMaster(tenantId: string, userId: string | null): Promise<PlatformState> {
+  await requirePlatformAdmin();
+  const tenant = await db.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
+  if (!tenant || tenant.slug === PLATFORM_TENANT_SLUG) return { error: "Plattform nicht gefunden." };
+  if (userId) {
+    const member = await db.user.findFirst({ where: { id: userId, tenantId, active: true }, select: { id: true } });
+    if (!member) return { error: "Aktives Mitglied nicht gefunden." };
+  }
+  await db.$transaction(async (tx) => {
+    await tx.user.updateMany({ where: { tenantId, isTenantMaster: true }, data: { isTenantMaster: false, role: "SALES" } });
+    if (userId) await tx.user.update({ where: { id: userId }, data: { role: "ADMIN", isTenantMaster: true } });
+  });
+  refresh(tenantId);
+  return { ok: userId ? "Plattform-Master gespeichert." : "Plattform-Master entfernt." };
+}
+
 /** Mitglied eines beliebigen Dashboards entfernen (Rubrik "Mitglieder Plattformen"). */
 export async function removeTenantMember(tenantId: string, userId: string): Promise<PlatformState> {
   const admin = await requirePlatformAdmin();

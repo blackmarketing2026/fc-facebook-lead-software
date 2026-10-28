@@ -19,6 +19,8 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { template: `%s · ${name}`, default: name },
     description: "Leads empfangen, verteilen und bearbeiten",
+    manifest: "/manifest.webmanifest",
+    appleWebApp: { capable: true, title: name, statusBarStyle: "default" },
   };
 }
 

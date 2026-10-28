@@ -177,17 +177,22 @@ export async function sendAssigneeLeadMail(leadId: string): Promise<AssigneeMail
       id: true,
       fullName: true,
       receivedAt: true,
-      tenant: { select: { slug: true, name: true } },
-      assignedTo: { select: { displayName: true, email: true, active: true, notifyNewLeadEmail: true } },
+      tenant: { select: { id: true, slug: true, name: true } },
+      assignedTo: { select: { displayName: true, email: true, active: true, notifyNewLeadEmail: true, absenceReason: true, substituteId: true } },
       answers: { orderBy: { position: "asc" }, select: { questionKey: true, questionLabel: true, answers: true } },
     },
   });
   const user = lead.assignedTo;
   if (!user) return { sent: false, reason: "Der Lead ist niemandem zugewiesen." };
+  const substitute = user.absenceReason && user.substituteId
+    ? await db.user.findFirst({ where: { id: user.substituteId, tenantId: lead.tenant.id, active: true, role: "SALES", absenceReason: null }, select: { displayName: true, email: true, notifyNewLeadEmail: true } })
+    : null;
+  const recipient = substitute || user;
   if (!user.active) return { sent: false, reason: `${user.displayName} ist deaktiviert.` };
-  if (!user.notifyNewLeadEmail) return { sent: false, reason: `Bei ${user.displayName} ist „E-Mail bei neuem Lead“ ausgeschaltet.` };
-  if (!user.email) return { sent: false, reason: `${user.displayName} hat keine E-Mail-Adresse.` };
+  if (user.absenceReason && !substitute) return { sent: false, reason: `Für ${user.displayName} ist keine verfügbare Vertretung hinterlegt.` };
+  if (!recipient.notifyNewLeadEmail) return { sent: false, reason: `Bei ${recipient.displayName} ist „E-Mail bei neuem Lead“ ausgeschaltet.` };
+  if (!recipient.email) return { sent: false, reason: `${recipient.displayName} hat keine E-Mail-Adresse.` };
   const mail = buildLeadMail(lead.tenant, { ...lead, assignedTo: user.displayName }, true);
-  const sent = await sendMail({ to: [user.email], ...mail });
-  return sent ? { sent: true, to: user.email } : { sent: false, reason: "Der Mailversand (SMTP) ist auf dem Server nicht eingerichtet." };
+  const sent = await sendMail({ to: [recipient.email], ...mail });
+  return sent ? { sent: true, to: recipient.email } : { sent: false, reason: "Der Mailversand (SMTP) ist auf dem Server nicht eingerichtet." };
 }
