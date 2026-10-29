@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/session";
 import { deleteUser } from "@/app/actions/settings";
 import { Closings } from "@/components/closings";
 import { RemoveMemberButton } from "@/components/remove-member-button";
+import { LoginLink } from "@/app/[tenant]/(app)/platform/login-link";
 import { CreateUserForm, EditUserForm } from "./user-forms";
 
 export const metadata = { title: "Mitglieder" };
@@ -27,6 +28,11 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
           </a>
         </p>
       </div>
+
+      <section className="card space-y-3 p-4">
+        <div><h2 className="font-semibold">Login-URL für Mitglieder</h2><p className="text-sm text-slate-500">Diesen Link können alle Mitglieder dieser Plattform zum Anmelden nutzen.</p></div>
+        <LoginLink slug={admin.tenant.slug} showUrl />
+      </section>
 
       <div className="space-y-3">
         {users.map((u) => (
