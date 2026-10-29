@@ -140,7 +140,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
       </section>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        <div className="order-2 space-y-6 lg:order-1 lg:col-span-2">
           <section className="card p-5">
             <h2 className="mb-3 font-semibold">Gesprächsprotokoll</h2>
             <NoteForm leadId={lead.id} />
@@ -170,7 +170,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           </section>
         </div>
 
-        <div className="space-y-6">
+        <div className="order-1 space-y-6 lg:order-2">
           <section className="card p-5">
             <h2 className="mb-3 font-semibold">Termin / Aufgabe planen</h2>
             <ReminderForm leadId={lead.id} defaultDue={defaultDueValue()} />

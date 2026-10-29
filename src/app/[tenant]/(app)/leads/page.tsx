@@ -94,7 +94,16 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
         </div>
       </form>
 
-      <div className="card overflow-x-auto">
+      <div className="space-y-3 md:hidden">
+        {leads.length === 0 && <div className="card p-8 text-center text-sm text-slate-500">Keine Leads gefunden.</div>}
+        {leads.map((lead) => <Link key={lead.id} href={`${base}/${lead.id}`} className="card lead-mobile-card block p-4">
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate font-semibold">{lead.fullName || "Unbekannt"}</div><div className="mt-1 text-xs text-slate-500">{allTenants && `${lead.tenant.name} · `}{formatDateTime(lead.receivedAt)}</div></div><StatusBadge status={lead.status} /></div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">{lead.phone && <span>{lead.phone}</span>}{user.role === "ADMIN" && <span>{lead.assignedTo?.displayName ?? "Nicht zugewiesen"}</span>}</div>
+          <div className="mt-3 border-t border-slate-100 pt-3 text-right text-sm font-semibold text-[var(--accent-dark)]">Lead öffnen →</div>
+        </Link>)}
+      </div>
+
+      <div className="card hidden overflow-x-auto md:block">
         <table className="min-w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>

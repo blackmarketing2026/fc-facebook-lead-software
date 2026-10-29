@@ -48,7 +48,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Hallo {user.displayName}</h1>
+      <section className="tenant-hero"><div><span className="tenant-hero-kicker">DEIN TAG IM ÜBERBLICK</span><h1>Hallo {user.displayName.split(" ")[0]} 👋</h1><p>Hier findest du deine nächsten Schritte. Öffne einen Lead und lege direkt los.</p><Link href={tenantPath(slug, "/leads")} className="tenant-hero-action">Leads ansehen →</Link></div><div className="tenant-hero-counts"><div><strong>{newLeads.length}</strong><span>Neue Leads</span></div><div><strong>{reminders.length}</strong><span>Offene Termine</span></div></div></section>
+
+      <div className="grid gap-3 sm:grid-cols-3"><Link href={tenantPath(slug, "/leads")} className="card quick-link"><span className="quick-link-icon">↗</span><span><strong>Leads bearbeiten</strong><small>Kontakte und Status</small></span></Link><Link href={tenantPath(slug, "/calendar")} className="card quick-link"><span className="quick-link-icon">◷</span><span><strong>Termine ansehen</strong><small>Heute und demnächst</small></span></Link><Link href={tenantPath(slug, "/closings")} className="card quick-link"><span className="quick-link-icon">✓</span><span><strong>Abschlüsse</strong><small>Ergebnisse im Blick</small></span></Link></div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card p-5">

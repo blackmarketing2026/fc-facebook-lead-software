@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { logout } from "@/app/actions/auth";
+import { AppNavigation, type AppLink } from "@/components/app-navigation";
 import { LeadWatcher } from "@/components/lead-watcher";
-import { NavLinks } from "@/components/nav-links";
 import { NotificationBell } from "@/components/notification-bell";
 import { PushSetup } from "@/components/push-setup";
 import { seesAllTenants } from "@/lib/access";
@@ -13,83 +13,54 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
   const user = await requireUser();
   const platformAdmin = await getPlatformAdmin();
   const platformManager = await getPlatformManager();
+  const master = seesAllTenants(user);
   const t = (path: string) => tenantPath(user.tenant.slug, path);
-  // Ist Push eingerichtet, fragt schon PushSetup nach der Erlaubnis für Benachrichtigungen.
+  const brand = displayName(user.tenant);
   const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
   const pushEnabled = Boolean(vapid) && !vapid.startsWith("PLATZHALTER");
-  // Master-Account: schlankes Menü für die Übersicht über alle Plattformen, Seltenes unter „Mehr“.
-  const master = seesAllTenants(user);
-  const masterLinks = [
-    { href: t("/platform"), label: "Plattformen" },
-    { href: t("/leads"), label: "Leads" },
-    { href: t("/platform/members"), label: "Mitglieder" },
-    { href: t("/settings/mailbox"), label: "Postfächer" },
-    { href: t("/settings/distribution-test"), label: "Verteilungstest" },
-    { href: t("/log"), label: "Log" },
+
+  const primary: AppLink[] = master ? [
+    { href: t("/platform"), label: "Plattformen", icon: "layers" },
+    { href: t("/leads"), label: "Alle Leads", icon: "leads" },
+    { href: t("/platform/members"), label: "Mitglieder", icon: "users" },
+    { href: t("/settings/mailbox"), label: "Postfächer", icon: "mail" },
+  ] : [
+    { href: t("/dashboard"), label: "Start", icon: "home" },
+    { href: t("/leads"), label: "Leads", icon: "leads" },
+    { href: t("/calendar"), label: "Kalender", icon: "calendar" },
+    { href: t("/closings"), label: "Abschlüsse", icon: "chart" },
   ];
-  const masterMore = [
-    { href: t("/dashboard"), label: "Dashboard" },
-    { href: t("/calendar"), label: "Kalender" },
-    { href: t("/closings"), label: "Abschlüsse" },
-    { href: t("/settings/distribution"), label: "Verteilung" },
-    { href: t("/settings/notifications"), label: "Benachrichtigungen" },
-  ];
-  const links = [
-    { href: t("/dashboard"), label: "Dashboard" },
-    { href: t("/leads"), label: "Leads" },
-    { href: t("/calendar"), label: "Kalender" },
-    { href: t("/closings"), label: "Abschlüsse" },
-    ...(user.role === "ADMIN"
-      ? [
-          { href: t("/settings/users"), label: "Mitglieder" },
-          { href: t("/settings/distribution"), label: "Verteilung" },
-          { href: t("/settings/distribution-test"), label: "Verteilungstest" },
-          { href: t("/settings/mailbox"), label: "Postfach" },
-          { href: t("/settings/notifications"), label: "Benachrichtigungen" },
-          { href: t("/log"), label: "Log" },
-        ]
-      : []),
-    ...(platformManager
-      ? [
-          { href: t("/platform"), label: "Plattform" },
-          ...(platformAdmin ? [{ href: t("/platform/members"), label: "Mitglieder Plattformen" }] : []),
-        ]
-      : []),
+  const secondary: AppLink[] = master ? [
+    { href: t("/settings/distribution-test"), label: "Verteilungstest", icon: "sliders" },
+    { href: t("/log"), label: "Protokoll", icon: "settings" },
+    { href: t("/dashboard"), label: "Dashboard", icon: "home" },
+    { href: t("/calendar"), label: "Kalender", icon: "calendar" },
+    { href: t("/closings"), label: "Abschlüsse", icon: "chart" },
+    { href: t("/settings/distribution"), label: "Verteilung", icon: "sliders" },
+    { href: t("/settings/notifications"), label: "Benachrichtigungen", icon: "settings" },
+  ] : [
+    ...(user.role === "ADMIN" ? [
+      { href: t("/settings/users"), label: "Mitglieder", icon: "users" },
+      { href: t("/settings/distribution"), label: "Verteilung", icon: "sliders" },
+      { href: t("/settings/distribution-test"), label: "Verteilungstest", icon: "sliders" },
+      { href: t("/settings/mailbox"), label: "Postfach", icon: "mail" },
+      { href: t("/settings/notifications"), label: "Benachrichtigungen", icon: "settings" },
+      { href: t("/log"), label: "Protokoll", icon: "settings" },
+    ] : []),
+    ...(platformManager ? [
+      { href: t("/platform"), label: "Plattformen", icon: "layers" },
+      ...(platformAdmin ? [{ href: t("/platform/members"), label: "Plattformmitglieder", icon: "users" }] : []),
+    ] : []),
   ];
 
-  return (
-    <div className="min-h-screen">
-      {user.operator && (
-        <div className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
-          Plattform-Zugriff ({user.displayName}) im Dashboard <strong>{user.tenant.name}</strong>
-          {user.tenant.status === "SUSPENDED" && " · Dashboard ist gesperrt"}
-          {user.tenant.isDevelopment && " · Entwicklungs-Mandant"}
-          <Link href={tenantPath(user.homeTenantSlug, "/platform")} className="ml-3 font-medium underline">
-            Zurück zur Plattform
-          </Link>
-        </div>
-      )}
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <Link href={t("/dashboard")} className="font-semibold text-slate-900">
-            {displayName(user.tenant)}
-          </Link>
-          {master ? <NavLinks links={masterLinks} more={masterMore} /> : <NavLinks links={links} />}
-          <div className="ml-auto flex items-center gap-3">
-            <NotificationBell />
-            <span className="hidden text-sm text-slate-600 sm:inline">
-              {user.displayName}
-              {user.role === "ADMIN" && <span className="ml-1 text-xs text-slate-400">(Admin)</span>}
-            </span>
-            <form action={logout}>
-              <button className="btn-secondary py-1.5">Abmelden</button>
-            </form>
-          </div>
-        </div>
-      </header>
-      <PushSetup vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""} />
+  return <div className={`app-shell ${master ? "app-shell--master" : "app-shell--tenant"}`}>
+    <AppNavigation primary={primary} secondary={secondary} master={master} brand={brand} />
+    <div className="shell-content">
+      {user.operator && <div className="shell-operator">Du verwaltest <strong>{user.tenant.name}</strong> als {user.displayName}. <Link href={tenantPath(user.homeTenantSlug, "/platform")}>Zurück zur Plattform →</Link></div>}
+      <header className="shell-header"><div className="shell-header-title"><span className="shell-eyebrow">{master ? "MASTERBEREICH" : "DEIN ARBEITSBEREICH"}</span><strong>{master ? "Übersicht & Verwaltung" : brand}</strong></div><div className="shell-header-actions"><NotificationBell /><span className="shell-user-name">{user.displayName}</span><form action={logout}><button className="shell-logout">Abmelden</button></form></div></header>
+      <PushSetup vapidPublicKey={vapid} />
       <LeadWatcher askPermission={!pushEnabled} />
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <main className="shell-main">{children}</main>
     </div>
-  );
+  </div>;
 }
