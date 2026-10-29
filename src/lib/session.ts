@@ -73,6 +73,7 @@ export const getCurrentUser = cache(async () => {
       tenantId: true,
       tenant: { select: { slug: true } },
       isPlatformAdmin: true,
+      isTenantMaster: true,
       platformGrants: { select: { tenantId: true } },
     },
   });

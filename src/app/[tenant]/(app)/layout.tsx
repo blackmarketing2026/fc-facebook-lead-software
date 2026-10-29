@@ -14,6 +14,7 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
   const platformAdmin = await getPlatformAdmin();
   const platformManager = await getPlatformManager();
   const master = seesAllTenants(user);
+  const localMaster = user.isTenantMaster && !user.operator && !master;
   const t = (path: string) => tenantPath(user.tenant.slug, path);
   const brand = displayName(user.tenant);
   const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
@@ -45,9 +46,9 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
       { href: t("/settings/distribution-test"), label: "Verteilungstest", icon: "sliders" },
       { href: t("/settings/mailbox"), label: "Postfach", icon: "mail" },
       { href: t("/settings/notifications"), label: "Benachrichtigungen", icon: "settings" },
-      { href: t("/log"), label: "Protokoll", icon: "settings" },
+      ...(!localMaster ? [{ href: t("/log"), label: "Protokoll", icon: "settings" }] : []),
     ] : []),
-    ...(platformManager ? [
+    ...(platformManager && !localMaster ? [
       { href: t("/platform"), label: "Plattformen", icon: "layers" },
       ...(platformAdmin ? [{ href: t("/platform/members"), label: "Plattformmitglieder", icon: "users" }] : []),
     ] : []),
