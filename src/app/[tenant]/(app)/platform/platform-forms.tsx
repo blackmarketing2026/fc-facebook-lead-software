@@ -6,6 +6,7 @@ import {
   addTenantAdmin,
   createTenant,
   renameTenant,
+  setTenantMasterPassword,
   setFeature,
   type PlatformState,
 } from "@/app/actions/platform";
@@ -158,6 +159,19 @@ export function AddAdminForm({ tenantId }: { tenantId: string }) {
       <button disabled={pending} className="btn-secondary">
         Admin anlegen
       </button>
+    </form>
+  );
+}
+
+export function TenantMasterPasswordForm({ tenantId, userId }: { tenantId: string; userId: string }) {
+  const [state, action, pending] = useActionState(setTenantMasterPassword.bind(null, tenantId, userId), undefined);
+  const ref = useResetOnOk(state);
+  return (
+    <form ref={ref} action={action} className="mt-4 grid gap-3 border-t border-blue-100 pt-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <label><span className="label">Neues Passwort</span><input name="password" type="password" required minLength={8} maxLength={128} autoComplete="new-password" className="input" /></label>
+      <label><span className="label">Passwort bestätigen</span><input name="passwordConfirm" type="password" required minLength={8} maxLength={128} autoComplete="new-password" className="input" /></label>
+      <button disabled={pending} className="btn-secondary">{pending ? "Speichern …" : "Passwort setzen"}</button>
+      <div className="sm:col-span-3" role="status"><Feedback state={state} /></div>
     </form>
   );
 }

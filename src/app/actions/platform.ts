@@ -204,6 +204,25 @@ export async function setTenantMaster(tenantId: string, userId: string | null): 
   return { ok: userId ? "Plattform-Master gespeichert." : "Plattform-Master entfernt." };
 }
 
+/** Nur der Hauptmaster darf das Passwort eines lokalen Plattform-Masters setzen. */
+export async function setTenantMasterPassword(tenantId: string, userId: string, _prev: PlatformState, formData: FormData): Promise<PlatformState> {
+  await requirePlatformAdmin();
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8) return { error: "Das Passwort muss mindestens 8 Zeichen haben." };
+  if (password.length > 128) return { error: "Das Passwort darf höchstens 128 Zeichen haben." };
+  if (password !== formData.get("passwordConfirm")) return { error: "Die Passwörter stimmen nicht überein." };
+
+  const master = await db.user.findFirst({
+    where: { id: userId, tenantId, isTenantMaster: true, role: "ADMIN", isPlatformAdmin: false, tenant: { slug: { not: PLATFORM_TENANT_SLUG } } },
+    select: { id: true },
+  });
+  if (!master) return { error: "Plattform-Master nicht gefunden." };
+
+  await db.user.update({ where: { id: master.id }, data: { passwordHash: await bcrypt.hash(password, 12) } });
+  refresh(tenantId);
+  return { ok: "Passwort gespeichert." };
+}
+
 /** Mitglied eines beliebigen Dashboards entfernen (Rubrik "Mitglieder Plattformen"). */
 export async function removeTenantMember(tenantId: string, userId: string): Promise<PlatformState> {
   const admin = await requirePlatformAdmin();

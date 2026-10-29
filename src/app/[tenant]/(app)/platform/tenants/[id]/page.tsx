@@ -7,7 +7,7 @@ import { formatDateTime } from "@/lib/format";
 import { ROUTE_TYPE_LABELS } from "@/lib/lead-routing";
 import { requirePlatformAdmin } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
-import { AddAdminForm, AddRouteForm, FeatureToggle, RenameTenantForm } from "../../platform-forms";
+import { AddAdminForm, AddRouteForm, FeatureToggle, RenameTenantForm, TenantMasterPasswordForm } from "../../platform-forms";
 
 export const metadata = { title: "Dashboard verwalten" };
 
@@ -121,7 +121,7 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
 
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Nutzer</h2>
-        {!isPlatform && <div className="mb-5 rounded-lg bg-blue-50 p-4"><h3 className="font-semibold">Plattform-Master</h3><p className="mb-3 text-sm text-slate-600">Verwaltet Mitglieder, Status und Lead-Verteilung nur in dieser Plattform. Der Hauptmaster-Zugang bleibt getrennt.</p><form action={async (formData) => { "use server"; await setTenantMaster(tenant.id, String(formData.get("userId") || "") || null); }} className="flex flex-wrap gap-2"><select name="userId" defaultValue={tenant.users.find((u) => u.isTenantMaster)?.id ?? ""} className="input max-w-sm"><option value="">Kein Plattform-Master</option>{tenant.users.filter((u) => u.active).map((u) => <option key={u.id} value={u.id}>{u.displayName} ({u.email})</option>)}</select><button className="btn-primary">Speichern</button></form></div>}
+        {!isPlatform && <div className="mb-5 rounded-lg bg-blue-50 p-4"><h3 className="font-semibold">Plattform-Master</h3><p className="mb-3 text-sm text-slate-600">Verwaltet Mitglieder, Status und Lead-Verteilung nur in dieser Plattform. Der Hauptmaster-Zugang bleibt getrennt.</p><form action={async (formData) => { "use server"; await setTenantMaster(tenant.id, String(formData.get("userId") || "") || null); }} className="flex flex-wrap gap-2"><select name="userId" defaultValue={tenant.users.find((u) => u.isTenantMaster)?.id ?? ""} className="input max-w-sm"><option value="">Kein Plattform-Master</option>{tenant.users.filter((u) => u.active).map((u) => <option key={u.id} value={u.id}>{u.displayName} ({u.email})</option>)}</select><button className="btn-primary">Speichern</button></form>{tenant.users.filter((u) => u.isTenantMaster).map((u) => <TenantMasterPasswordForm key={u.id} tenantId={tenant.id} userId={u.id} />)}</div>}
         <ul className="mb-5 divide-y divide-slate-100 text-sm">
           {tenant.users.map((u) => (
             <li key={u.id} className="flex flex-wrap items-center gap-3 py-2">
