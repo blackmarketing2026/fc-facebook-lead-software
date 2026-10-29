@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deleteRoute, openTenant, setTenantStatus, setTenantMaster } from "@/app/actions/platform";
+import { deleteRoute, openTenant, setTenantStatus, setTenantMaster, setAdminSalesEnabled } from "@/app/actions/platform";
 import { db } from "@/lib/db";
 import { FEATURES, parseFeatures } from "@/lib/features";
 import { formatDateTime } from "@/lib/format";
@@ -20,7 +20,7 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
       leadRoutes: { orderBy: [{ priority: "desc" }, { createdAt: "asc" }] },
       users: {
         orderBy: [{ role: "asc" }, { displayName: "asc" }],
-        select: { id: true, displayName: true, email: true, role: true, active: true, isTenantMaster: true },
+        select: { id: true, displayName: true, email: true, role: true, active: true, isTenantMaster: true, salesEnabled: true },
       },
       _count: { select: { leads: true } },
     },
@@ -130,6 +130,8 @@ export default async function TenantDetailPage(props: PageProps<"/[tenant]/platf
                 {u.isTenantMaster ? "Plattform-Master" : u.role === "ADMIN" ? "Admin" : "Vertrieb"}
               </span>
               {!u.active && <span className="badge bg-red-100 text-red-700">deaktiviert</span>}
+              {u.role === "ADMIN" && !isPlatform && <form action={async () => { "use server"; await setAdminSalesEnabled(tenant.id, u.id, !u.salesEnabled); }}><button className="btn-secondary px-2 py-1 text-xs">{u.salesEnabled ? "Vertriebsteilnahme ausschalten" : "Zur Lead-Verteilung hinzufügen"}</button></form>}
+              {u.salesEnabled && <span className="badge bg-blue-100 text-blue-800">Auch Vertrieb</span>}
               <span className="ml-auto text-slate-500">{u.email}</span>
             </li>
           ))}

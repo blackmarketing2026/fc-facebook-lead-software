@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { openTenant, removeTenantMember } from "@/app/actions/platform";
+import { openTenant, removeTenantMember, setAdminSalesEnabled } from "@/app/actions/platform";
 import { RemoveMemberButton } from "@/components/remove-member-button";
 import { db } from "@/lib/db";
 import { requirePlatformAdmin } from "@/lib/session";
@@ -22,7 +22,7 @@ export default async function PlatformMembersPage() {
       isDevelopment: true,
       users: {
         orderBy: [{ role: "asc" }, { displayName: "asc" }],
-        select: { id: true, displayName: true, email: true, role: true, active: true, isPlatformAdmin: true, isTenantMaster: true, platformGrants: { select: { tenantId: true } } },
+        select: { id: true, displayName: true, email: true, role: true, active: true, isPlatformAdmin: true, isTenantMaster: true, salesEnabled: true, platformGrants: { select: { tenantId: true } } },
       },
     },
   });
@@ -81,7 +81,9 @@ export default async function PlatformMembersPage() {
                   {u.isPlatformAdmin && <span className="badge bg-amber-100 text-amber-800">Master</span>}
                   {u.platformGrants.length > 0 && <span className="badge bg-blue-100 text-blue-800">Stufe 2 · {u.platformGrants.length}</span>}
                   {!u.active && <span className="badge bg-red-100 text-red-700">deaktiviert</span>}
+                  {u.salesEnabled && <span className="badge bg-blue-100 text-blue-800">Auch Vertrieb</span>}
                   <span className="text-slate-500">{u.email}</span>
+                  {t.slug !== PLATFORM_TENANT_SLUG && u.role === "ADMIN" && !u.isPlatformAdmin && <form action={async () => { "use server"; await setAdminSalesEnabled(t.id, u.id, !u.salesEnabled); }}><button className="btn-secondary px-2 py-1 text-xs">{u.salesEnabled ? "Vertriebsteilnahme ausschalten" : "Zur Lead-Verteilung hinzufügen"}</button></form>}
                   <div className="ml-auto">
                     {u.id !== admin.id && !u.isPlatformAdmin && (
                       <RemoveMemberButton action={removeTenantMember.bind(null, t.id, u.id)} name={u.displayName} />

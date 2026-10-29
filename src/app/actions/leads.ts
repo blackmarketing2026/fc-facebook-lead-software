@@ -199,7 +199,7 @@ export async function reassignLead(leadId: string, userId: string) {
     where: { id: leadId },
     select: { tenantId: true, assignedToId: true, fullName: true, tenant: { select: { slug: true } } },
   });
-  const target = await db.user.findFirst({ where: { id: userId, tenantId, active: true } });
+  const target = await db.user.findFirst({ where: { id: userId, tenantId, active: true, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] } });
   if (!target) throw new Error("Benutzer nicht gefunden");
 
   await db.$transaction([

@@ -204,6 +204,24 @@ export async function setTenantMaster(tenantId: string, userId: string | null): 
   return { ok: userId ? "Plattform-Master gespeichert." : "Plattform-Master entfernt." };
 }
 
+/** Zusätzliche Vertriebsfunktion für einen lokalen Admin, ohne seine Adminrechte zu ändern. */
+export async function setAdminSalesEnabled(tenantId: string, userId: string, enabled: boolean): Promise<PlatformState> {
+  await requirePlatformAdmin();
+  const member = await db.user.findFirst({
+    where: { id: userId, tenantId, role: "ADMIN", isPlatformAdmin: false, tenant: { slug: { not: PLATFORM_TENANT_SLUG } } },
+    select: { id: true },
+  });
+  if (!member) return { error: "Plattform-Admin nicht gefunden." };
+  await db.$transaction([
+    db.user.update({ where: { id: member.id }, data: { salesEnabled: enabled, distCurrent: 0 } }),
+    db.user.updateMany({ where: { tenantId }, data: { distCurrent: 0 } }),
+  ]);
+  refresh(tenantId);
+  revalidatePath(`${PLATFORM}/members`);
+  revalidatePath("/[tenant]/settings/distribution", "page");
+  return { ok: enabled ? "Vertriebsteilnahme aktiviert." : "Vertriebsteilnahme deaktiviert." };
+}
+
 /** Nur der Hauptmaster darf das Passwort eines lokalen Plattform-Admins setzen. */
 export async function setTenantMasterPassword(tenantId: string, userId: string, _prev: PlatformState, formData: FormData): Promise<PlatformState> {
   await requirePlatformAdmin();

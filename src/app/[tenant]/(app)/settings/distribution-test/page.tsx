@@ -22,7 +22,7 @@ export default async function DistributionTestPage() {
       select: { id: true, tenantId: true, fullName: true, receivedAt: true, assignedTo: { select: { displayName: true } }, tenant: { select: { name: true } } },
     }),
     db.user.findMany({
-      where: { ...scope, role: "SALES" },
+      where: { ...scope, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] },
       orderBy: { distOrder: "asc" },
       select: {
         id: true,

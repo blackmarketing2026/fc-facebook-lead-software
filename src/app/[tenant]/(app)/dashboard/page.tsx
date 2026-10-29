@@ -143,7 +143,7 @@ export default async function DashboardPage() {
 async function AdminStats({ tenantId, slug, todayStart }: { tenantId: string; slug: string; todayStart: Date }) {
   const weekStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
   const [salesUsers, today, week, byStatus, unassigned, latest] = await Promise.all([
-    db.user.findMany({ where: { tenantId, role: "SALES" }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true, active: true, distPaused: true } }),
+    db.user.findMany({ where: { tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true, active: true, distPaused: true } }),
     db.lead.groupBy({ by: ["assignedToId"], where: { tenantId, receivedAt: { gte: todayStart } }, _count: true }),
     db.lead.groupBy({ by: ["assignedToId"], where: { tenantId, receivedAt: { gte: weekStart } }, _count: true }),
     db.lead.groupBy({ by: ["status"], where: { tenantId }, _count: true }),

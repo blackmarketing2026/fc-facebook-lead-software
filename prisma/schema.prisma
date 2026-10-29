@@ -124,6 +124,7 @@ model User {
   absenceReason   String?  @db.VarChar(20)
   substituteId    String?
   isTenantMaster  Boolean  @default(false)
+  salesEnabled    Boolean  @default(false)
   distCurrent     Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

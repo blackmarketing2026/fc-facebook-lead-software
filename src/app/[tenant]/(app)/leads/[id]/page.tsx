@@ -66,7 +66,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
     });
   // Vertriebler des Dashboards, zu dem der Lead gehört (im Hauptaccount nicht zwingend das eigene).
   const salesUsers = await db.user.findMany({
-    where: { tenantId: lead.tenantId, role: "SALES", active: true },
+    where: { tenantId: lead.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }], active: true },
     orderBy: { distOrder: "asc" },
     select: { id: true, displayName: true },
   });

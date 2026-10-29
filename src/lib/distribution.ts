@@ -57,7 +57,7 @@ export async function assignNextSalesUser(tx: Prisma.TransactionClient, tenantId
   const rows = await tx.$queryRaw<DistCandidate[]>`
     SELECT id, distOrder, distWeight, distCurrent
     FROM User
-    WHERE tenantId = ${tenantId} AND role = 'SALES' AND active = true AND distPaused = false
+    WHERE tenantId = ${tenantId} AND (role = 'SALES' OR (role = 'ADMIN' AND salesEnabled = true)) AND active = true AND distPaused = false
     ORDER BY distOrder ASC
     FOR UPDATE`;
   const { winnerId, updated } = pickNext(rows);

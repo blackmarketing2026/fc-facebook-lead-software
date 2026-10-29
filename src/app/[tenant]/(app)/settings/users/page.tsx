@@ -14,7 +14,7 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
   const users = await db.user.findMany({
     where: { tenantId: admin.tenantId },
     orderBy: [{ role: "asc" }, { distOrder: "asc" }],
-    select: { id: true, email: true, displayName: true, role: true, active: true, notifyNewLeadEmail: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } },
+    select: { id: true, email: true, displayName: true, role: true, active: true, salesEnabled: true, notifyNewLeadEmail: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } },
   });
 
   return (
@@ -44,6 +44,7 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
               </span>
               {!u.active && <span className="badge bg-red-100 text-red-700">deaktiviert</span>}
               {u.platformGrants.length > 0 && <span className="badge bg-blue-100 text-blue-800">Stufe 2</span>}
+              {u.salesEnabled && <span className="badge bg-blue-100 text-blue-800">Auch Vertrieb</span>}
               <span className="ml-auto text-sm text-slate-500">{u.email}</span>
               <span className="text-slate-400 transition group-open:rotate-180">▾</span>
             </summary>

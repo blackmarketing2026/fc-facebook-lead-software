@@ -140,13 +140,13 @@ export async function setDistributionPaused(paused: boolean): Promise<SettingsSt
 
 export async function setSalesAbsence(userId: string, _prev: SettingsState, formData: FormData): Promise<SettingsState> {
   const admin = await requireAdmin();
-  const member = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId, role: "SALES" } });
+  const member = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] } });
   if (!member) return { error: "Vertriebler nicht gefunden." };
   const reason = String(formData.get("reason") ?? "");
   if (!["", "URLAUB", "KRANK"].includes(reason)) return { error: "Ungültiger Status." };
   const substituteId = String(formData.get("substituteId") ?? "");
   if (reason && substituteId) {
-    const substitute = await db.user.findFirst({ where: { id: substituteId, tenantId: admin.tenantId, role: "SALES", active: true, distPaused: false, absenceReason: null } });
+    const substitute = await db.user.findFirst({ where: { id: substituteId, tenantId: admin.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }], active: true, distPaused: false, absenceReason: null } });
     if (!substitute || substitute.id === member.id) return { error: "Vertretung ist nicht verfügbar." };
   }
   await db.user.update({ where: { id: userId }, data: { absenceReason: reason || null, substituteId: reason ? substituteId || null : null, distPaused: Boolean(reason), distCurrent: 0 } });
@@ -248,7 +248,7 @@ export async function testDistribution(_prev: DistributionTestState, formData: F
   const assignedToId = await db.$transaction(async (tx) => {
     const userId = auto
       ? await assignNextSalesUser(tx, lead.tenantId)
-      : (await tx.user.findFirst({ where: { id: target, tenantId: lead.tenantId, role: "SALES", active: true }, select: { id: true } }))?.id ?? null;
+      : (await tx.user.findFirst({ where: { id: target, tenantId: lead.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }], active: true }, select: { id: true } }))?.id ?? null;
     if (!userId) return null;
     await tx.lead.update({ where: { id: lead.id }, data: { assignedToId: userId } });
     await tx.reminder.updateMany({ where: { leadId: lead.id, done: false }, data: { userId, notifiedAt: null } });

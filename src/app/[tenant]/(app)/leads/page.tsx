@@ -33,7 +33,7 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
     }),
     db.lead.count({ where }),
     user.role === "ADMIN"
-      ? db.user.findMany({ where: { tenantId: user.tenantId, role: "SALES" }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true } })
+      ? db.user.findMany({ where: { tenantId: user.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true } })
       : Promise.resolve([]),
   ]);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));

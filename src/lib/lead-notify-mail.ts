@@ -185,7 +185,7 @@ export async function sendAssigneeLeadMail(leadId: string): Promise<AssigneeMail
   const user = lead.assignedTo;
   if (!user) return { sent: false, reason: "Der Lead ist niemandem zugewiesen." };
   const substitute = user.absenceReason && user.substituteId
-    ? await db.user.findFirst({ where: { id: user.substituteId, tenantId: lead.tenant.id, active: true, role: "SALES", absenceReason: null }, select: { displayName: true, email: true, notifyNewLeadEmail: true } })
+    ? await db.user.findFirst({ where: { id: user.substituteId, tenantId: lead.tenant.id, active: true, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }], absenceReason: null }, select: { displayName: true, email: true, notifyNewLeadEmail: true } })
     : null;
   const recipient = substitute || user;
   if (!user.active) return { sent: false, reason: `${user.displayName} ist deaktiviert.` };

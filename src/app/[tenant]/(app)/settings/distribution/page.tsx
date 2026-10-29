@@ -8,7 +8,7 @@ export const metadata = { title: "Verteilung" };
 export default async function DistributionPage() {
   const admin = await requireAdmin();
   const users = await db.user.findMany({
-    where: { tenantId: admin.tenantId, role: "SALES" },
+    where: { tenantId: admin.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] },
     orderBy: { distOrder: "asc" },
     select: { id: true, displayName: true, active: true, distWeight: true, distPaused: true, distOrder: true, distCurrent: true, absenceReason: true, substituteId: true },
   });
