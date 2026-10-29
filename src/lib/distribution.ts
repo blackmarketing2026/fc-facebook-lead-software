@@ -47,6 +47,19 @@ export function previewSequence(candidates: DistCandidate[], n: number): string[
   return result;
 }
 
+/** Setzt die Rotation zurück und lässt optional genau eine gewählte Person zuerst dran sein.
+ * Nach dieser ersten Zuweisung stehen alle Zähler wieder auf null; die Gewichte gelten unverändert weiter.
+ */
+export function rotationStartState(candidates: DistCandidate[], firstId: string | null): DistCandidate[] {
+  const eligible = candidates.filter((c) => c.distWeight > 0);
+  if (firstId && !eligible.some((c) => c.id === firstId)) throw new Error("Startperson ist nicht in der Rotation.");
+  const total = eligible.reduce((sum, c) => sum + c.distWeight, 0);
+  return candidates.map((c) => ({
+    ...c,
+    distCurrent: firstId && c.distWeight > 0 ? (c.id === firstId ? total - c.distWeight : -c.distWeight) : 0,
+  }));
+}
+
 /**
  * Wählt in einer laufenden Transaktion den nächsten Vertriebler des Mandanten und speichert die Zähler.
  * Die Zeilen werden mit FOR UPDATE gesperrt, damit parallele Leads sich nicht überschneiden.

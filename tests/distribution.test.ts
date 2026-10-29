@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickNext, previewSequence, type DistCandidate } from "@/lib/distribution";
+import { pickNext, previewSequence, rotationStartState, type DistCandidate } from "@/lib/distribution";
 
 const users = (w: [number, number, number]): DistCandidate[] => [
   { id: "martin", distOrder: 0, distWeight: w[0], distCurrent: 0 },
@@ -35,5 +35,18 @@ describe("Verteilung", () => {
   it("überspringt Gewicht 0 und leere Listen", () => {
     expect(count(previewSequence(users([1, 0, 1]), 10))).toEqual({ martin: 5, frances: 5 });
     expect(pickNext([]).winnerId).toBeNull();
+  });
+
+  it("startet nach dem Reset bei der gewählten Person und setzt danach alle Zähler auf null", () => {
+    const state = rotationStartState(users([5, 2, 1]), "frances");
+    const first = pickNext(state);
+    expect(first.winnerId).toBe("frances");
+    expect(first.updated.every((u) => u.distCurrent === 0)).toBe(true);
+    expect(previewSequence(first.updated, 8)).toEqual(previewSequence(users([5, 2, 1]), 8));
+  });
+
+  it("setzt ohne gewählte Startperson die normale gewichtete Rotation zurück", () => {
+    const state = users([2, 1, 1]).map((u) => ({ ...u, distCurrent: 10 }));
+    expect(rotationStartState(state, null).every((u) => u.distCurrent === 0)).toBe(true);
   });
 });

@@ -7,6 +7,7 @@ import { mailerConfigured } from "@/lib/mailer";
 import { requireAdmin } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
 import { DistributionTestForm } from "./distribution-test-form";
+import { RotationResetEditor } from "./rotation-reset-editor";
 
 export const metadata = { title: "Verteilungstest" };
 
@@ -14,7 +15,7 @@ export default async function DistributionTestPage() {
   const admin = await requireAdmin();
   const scope = tenantFilter(admin);
   const allTenants = seesAllTenants(admin);
-  const [leads, sales] = await Promise.all([
+  const [leads, sales, tenants] = await Promise.all([
     db.lead.findMany({
       where: scope,
       orderBy: { receivedAt: "desc" },
@@ -37,6 +38,11 @@ export default async function DistributionTestPage() {
         distWeight: true,
         distCurrent: true,
       },
+    }),
+    db.tenant.findMany({
+      where: allTenants ? {} : { id: admin.tenantId },
+      orderBy: { code: "asc" },
+      select: { id: true, name: true, distributionPaused: true },
     }),
   ]);
   const inRotation = sales.filter((u) => u.active && !u.distPaused);
@@ -63,6 +69,12 @@ export default async function DistributionTestPage() {
           Der Mailversand ist auf dem Server nicht eingerichtet – der Test zeigt dann nur die Zuweisung.
         </div>
       )}
+
+      <section className="card p-5">
+        <h2 className="mb-1 text-lg font-semibold">Rotation neu beginnen</h2>
+        <p className="mb-5 text-sm text-slate-500">Setze den Verteiler zurück, ändere die Reihenfolge und bestimme, wer den nächsten automatisch verteilten Lead zuerst bekommt.</p>
+        <RotationResetEditor tenants={tenants} members={sales.map((member) => ({ id: member.id, tenantId: member.tenantId, displayName: member.displayName, active: member.active, distPaused: member.distPaused, distWeight: member.distWeight, distOrder: member.distOrder }))} />
+      </section>
 
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Lead zuweisen & benachrichtigen</h2>

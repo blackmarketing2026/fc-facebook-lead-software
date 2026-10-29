@@ -4,9 +4,9 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { tenantFilter } from "@/lib/access";
+import { seesAllTenants, tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
-import { assignNextSalesUser } from "@/lib/distribution";
+import { assignNextSalesUser, rotationStartState } from "@/lib/distribution";
 import { buildLeadMail, sendAssigneeLeadMail } from "@/lib/lead-notify-mail";
 import { processInboundMail, reprocessInbound } from "@/lib/lead-service";
 import { mailerConfigured, mailerInfo, missingMailerVars, parseEmailList, sendMail } from "@/lib/mailer";
@@ -129,6 +129,46 @@ export async function saveDistribution(entries: unknown): Promise<SettingsState>
   );
   revalidatePath("/[tenant]/settings/distribution", "page");
   return { ok: "Verteilung gespeichert." };
+}
+
+const rotationResetSchema = z.object({
+  tenantId: z.string().min(1),
+  orderIds: z.array(z.string().min(1)),
+  firstId: z.string().nullable(),
+});
+
+/** Neustart der laufenden Rotation: Reihenfolge speichern, Zähler leeren und Startperson vormerken. */
+export async function resetDistributionRotation(input: unknown): Promise<SettingsState> {
+  const admin = await requireAdmin();
+  const parsed = rotationResetSchema.safeParse(input);
+  if (!parsed.success) return { error: "Ungültige Rotationseinstellungen." };
+  const { tenantId, orderIds, firstId } = parsed.data;
+  if (!seesAllTenants(admin) && tenantId !== admin.tenantId) return { error: "Kein Zugriff auf diese Plattform." };
+  if (new Set(orderIds).size !== orderIds.length) return { error: "Die Reihenfolge enthält doppelte Mitglieder." };
+
+  const result = await db.$transaction(async (tx) => {
+    const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+    if (!tenant) return { error: "Plattform nicht gefunden." };
+    const rows = await tx.$queryRaw<Array<{ id: string; distWeight: number; active: boolean; distPaused: boolean }>>`
+      SELECT id, distWeight, active, distPaused FROM User
+      WHERE tenantId = ${tenantId} AND (role = 'SALES' OR (role = 'ADMIN' AND salesEnabled = true))
+      ORDER BY distOrder ASC FOR UPDATE`;
+    if (rows.length !== orderIds.length || rows.some((row) => !orderIds.includes(row.id))) {
+      return { error: "Die Mitgliederliste hat sich geändert. Bitte Seite neu laden." };
+    }
+    const eligible = rows.filter((row) => row.active && !row.distPaused && row.distWeight > 0);
+    if (firstId && !eligible.some((row) => row.id === firstId)) return { error: "Die Startperson ist nicht in der aktiven Rotation." };
+    const ordered = orderIds.map((id, distOrder) => ({ ...rows.find((row) => row.id === id)!, distOrder }));
+    const state = rotationStartState(eligible.map((row) => ({ id: row.id, distOrder: ordered.find((item) => item.id === row.id)!.distOrder, distWeight: row.distWeight, distCurrent: 0 })), firstId);
+    const current = new Map(state.map((row) => [row.id, row.distCurrent]));
+    for (const row of ordered) await tx.user.update({ where: { id: row.id }, data: { distOrder: row.distOrder, distCurrent: current.get(row.id) ?? 0 } });
+    return { ok: "Rotation zurückgesetzt. Die neue Reihenfolge ist aktiv." };
+  });
+  if (result.ok) {
+    revalidatePath("/[tenant]/settings/distribution-test", "page");
+    revalidatePath("/[tenant]/settings/distribution", "page");
+  }
+  return result;
 }
 
 export async function setDistributionPaused(paused: boolean): Promise<SettingsState> {
