@@ -204,7 +204,7 @@ export async function setTenantMaster(tenantId: string, userId: string | null): 
   return { ok: userId ? "Plattform-Master gespeichert." : "Plattform-Master entfernt." };
 }
 
-/** Nur der Hauptmaster darf das Passwort eines lokalen Plattform-Masters setzen. */
+/** Nur der Hauptmaster darf das Passwort eines lokalen Plattform-Admins setzen. */
 export async function setTenantMasterPassword(tenantId: string, userId: string, _prev: PlatformState, formData: FormData): Promise<PlatformState> {
   await requirePlatformAdmin();
   const password = String(formData.get("password") ?? "");
@@ -213,10 +213,10 @@ export async function setTenantMasterPassword(tenantId: string, userId: string, 
   if (password !== formData.get("passwordConfirm")) return { error: "Die Passwörter stimmen nicht überein." };
 
   const master = await db.user.findFirst({
-    where: { id: userId, tenantId, isTenantMaster: true, role: "ADMIN", isPlatformAdmin: false, tenant: { slug: { not: PLATFORM_TENANT_SLUG } } },
+    where: { id: userId, tenantId, role: "ADMIN", isPlatformAdmin: false, tenant: { slug: { not: PLATFORM_TENANT_SLUG } } },
     select: { id: true },
   });
-  if (!master) return { error: "Plattform-Master nicht gefunden." };
+  if (!master) return { error: "Plattform-Admin nicht gefunden." };
 
   await db.user.update({ where: { id: master.id }, data: { passwordHash: await bcrypt.hash(password, 12) } });
   refresh(tenantId);

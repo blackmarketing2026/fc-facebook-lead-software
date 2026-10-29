@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requirePlatformAdmin } from "@/lib/session";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 import { PlatformGrantForm } from "./platform-grant-form";
+import { TenantMasterPasswordForm } from "../platform-forms";
 
 export const metadata = { title: "Mitglieder Plattformen" };
 
@@ -21,7 +22,7 @@ export default async function PlatformMembersPage() {
       isDevelopment: true,
       users: {
         orderBy: [{ role: "asc" }, { displayName: "asc" }],
-        select: { id: true, displayName: true, email: true, role: true, active: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } },
+        select: { id: true, displayName: true, email: true, role: true, active: true, isPlatformAdmin: true, isTenantMaster: true, platformGrants: { select: { tenantId: true } } },
       },
     },
   });
@@ -75,7 +76,7 @@ export default async function PlatformMembersPage() {
                 <li key={u.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                   <span className="font-medium">{u.displayName}</span>
                   <span className={`badge ${u.role === "ADMIN" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}>
-                    {u.role === "ADMIN" ? "Admin" : "Vertrieb"}
+                    {u.isTenantMaster ? "Plattform-Master" : u.role === "ADMIN" ? "Admin" : "Vertrieb"}
                   </span>
                   {u.isPlatformAdmin && <span className="badge bg-amber-100 text-amber-800">Master</span>}
                   {u.platformGrants.length > 0 && <span className="badge bg-blue-100 text-blue-800">Stufe 2 · {u.platformGrants.length}</span>}
@@ -93,6 +94,7 @@ export default async function PlatformMembersPage() {
                       tenants={grantableTenants}
                     />
                   )}
+                  {t.slug !== PLATFORM_TENANT_SLUG && u.role === "ADMIN" && !u.isPlatformAdmin && <div className="w-full"><TenantMasterPasswordForm tenantId={t.id} userId={u.id} /></div>}
                 </li>
               ))}
             </ul>
