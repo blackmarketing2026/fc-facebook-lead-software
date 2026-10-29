@@ -299,7 +299,7 @@ export function ReminderActions({ reminderId, done, googleUrl }: { reminderId: s
         </a>
       )}
       <a href={`/${tenant}/api/reminders/${reminderId}/ics`} className="btn-secondary px-2 py-1 text-xs">
-        📅 .ics
+        📅 Outlook / .ics
       </a>
       {!done && (
         <button

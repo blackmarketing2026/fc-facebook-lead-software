@@ -90,6 +90,8 @@ export default async function CalendarPage(props: PageProps<"/[tenant]/calendar"
         </div>
       </div>
 
+      <CalendarSubscription feedUrl={me.calendarToken ? `${await requestOrigin()}${tenantPath(slug, `/api/calendar/${me.calendarToken}.ics`)}` : null} />
+
       <div className="grid gap-3 md:grid-cols-7">
         {days.map((day) => {
           const items = byDay.get(day) ?? [];
@@ -138,7 +140,6 @@ export default async function CalendarPage(props: PageProps<"/[tenant]/calendar"
         })}
       </div>
 
-      <CalendarSubscription feedUrl={me.calendarToken ? `${await requestOrigin()}${tenantPath(slug, `/api/calendar/${me.calendarToken}.ics`)}` : null} />
     </div>
   );
 }
