@@ -223,6 +223,62 @@ export async function reassignLead(leadId: string, userId: string) {
   ]);
 }
 
+export type TransferResult = { ok?: true; error?: string };
+
+/** Eigene Leads an einen Kollegen derselben Plattform oder unzugewiesen in den Pool geben. */
+export async function transferLead(leadId: string, targetId: string | null): Promise<TransferResult> {
+  const user = await requireUser();
+  await getAccessibleLeadOr404(user, leadId);
+  const lead = await db.lead.findUniqueOrThrow({
+    where: { id: leadId },
+    select: { id: true, tenantId: true, assignedToId: true, fullName: true, tenant: { select: { slug: true } } },
+  });
+  if (!lead.assignedToId) return { error: "Dieser Lead liegt bereits im Pool." };
+  if (user.role !== "ADMIN" && lead.assignedToId !== user.id) return { error: "Du kannst nur eigene Leads übergeben." };
+  if (targetId === lead.assignedToId) return { error: "Bitte einen anderen Mitarbeiter auswählen." };
+  if (targetId) {
+    const target = await db.user.findFirst({ where: { id: targetId, tenantId: lead.tenantId, active: true, distPaused: false, absenceReason: null, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] }, select: { id: true } });
+    if (!target) return { error: "Dieser Mitarbeiter ist nicht verfügbar." };
+  }
+
+  const changed = await db.$transaction(async (tx) => {
+    const update = await tx.lead.updateMany({ where: { id: leadId, assignedToId: lead.assignedToId }, data: { assignedToId: targetId } });
+    if (!update.count) return false;
+    if (targetId) await tx.reminder.updateMany({ where: { leadId, done: false }, data: { userId: targetId, notifiedAt: null } });
+    else await tx.reminder.deleteMany({ where: { leadId, done: false } });
+    await tx.activity.create({ data: { leadId, userId: user.id, type: "ASSIGNED", meta: { fromUserId: lead.assignedToId, toUserId: targetId, pool: !targetId, handoff: true } } });
+    return true;
+  });
+  if (!changed) return { error: "Der Lead wurde inzwischen anderweitig zugewiesen. Bitte Seite neu laden." };
+  if (user.role === "ADMIN") refreshLead();
+  else {
+    revalidatePath("/[tenant]/leads", "page");
+    revalidatePath("/[tenant]/dashboard", "page");
+  }
+  if (targetId) {
+    await Promise.all([
+      sendAssigneeLeadMail(leadId).catch((err) => console.error("[mail]", err)),
+      sendPushToUser(targetId, { title: "Lead übergeben", body: `${lead.fullName ?? "Ein Lead"} wurde dir übergeben`, url: tenantPath(lead.tenant.slug, `/leads/${leadId}`), tag: `lead-${leadId}` }).catch((err) => console.error("[push]", err)),
+    ]);
+  }
+  return { ok: true };
+}
+
+/** Einen freien Lead atomar übernehmen, damit nicht zwei Mitarbeiter denselben Lead erhalten. */
+export async function claimPoolLead(leadId: string): Promise<TransferResult> {
+  const user = await requireUser();
+  if (user.role !== "SALES") return { error: "Nur Vertriebler können Leads aus dem Pool übernehmen." };
+  const changed = await db.$transaction(async (tx) => {
+    const update = await tx.lead.updateMany({ where: { id: leadId, tenantId: user.tenantId, assignedToId: null }, data: { assignedToId: user.id } });
+    if (!update.count) return false;
+    await tx.activity.create({ data: { leadId, userId: user.id, type: "ASSIGNED", meta: { toUserId: user.id, fromUserId: null, claimed: true } } });
+    return true;
+  });
+  if (!changed) return { error: "Dieser Lead ist nicht mehr im Pool." };
+  refreshLead();
+  return { ok: true };
+}
+
 /** Entfernt die Bearbeitungshistorie und stellt den Lead als neu und unzugewiesen bereit. */
 export async function resetLead(leadId: string) {
   const admin = await requireAdmin();

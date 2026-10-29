@@ -20,6 +20,7 @@ import {
   ReminderActions,
   ReminderForm,
   StatusSelect,
+  TransferLeadControls,
 } from "./lead-controls";
 
 export const metadata = { title: "Lead" };
@@ -40,6 +41,7 @@ function activityText(type: ActivityType, meta: unknown, users: Map<string, stri
       return `Status: ${STATUS_LABELS[m.from as LeadStatus] ?? m.from} → ${STATUS_LABELS[m.to as LeadStatus] ?? m.to}${m.auto ? " (automatisch)" : ""}${provision}`;
     }
     case "ASSIGNED":
+      if (m.pool) return "Zurück in den freien Pool gegeben";
       return `Zugewiesen an ${users.get(m.toUserId as string) ?? "?"}${m.auto ? " (automatisch)" : ""}${m.test ? " – Verteilungstest" : ""}`;
     case "REMINDER_SET":
       return `${m.type ? reminderLabel(m.type as ReminderType) : "Rückruf"} geplant für ${m.dueAt ? formatDateTime(new Date(m.dueAt as string)) : "?"}`;
@@ -68,7 +70,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
   const salesUsers = await db.user.findMany({
     where: { tenantId: lead.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }], active: true },
     orderBy: { distOrder: "asc" },
-    select: { id: true, displayName: true },
+    select: { id: true, displayName: true, distPaused: true, absenceReason: true },
   });
   const foreignTenant = lead.tenantId !== user.tenantId;
   const userNames = new Map(salesUsers.map((u) => [u.id, u.displayName]));
@@ -113,6 +115,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
               <span className="text-sm text-slate-500">Status</span>
               <StatusSelect leadId={lead.id} status={lead.status} commission={lead.commission?.toNumber() ?? null} />
             </div>
+            {lead.assignedToId && (user.role === "ADMIN" || lead.assignedToId === user.id) && <TransferLeadControls leadId={lead.id} currentOwnerId={lead.assignedToId} users={salesUsers.filter((member) => !member.distPaused && !member.absenceReason)} isAdmin={user.role === "ADMIN"} />}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-slate-500">Vertriebler</span>
               {user.role === "ADMIN" ? (

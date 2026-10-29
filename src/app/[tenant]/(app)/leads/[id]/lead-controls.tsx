@@ -1,7 +1,7 @@
 "use client";
 
 import type { LeadStatus, ReminderType } from "@prisma/client";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   addNote,
@@ -11,6 +11,7 @@ import {
   deleteReminder,
   reassignLead,
   trackContact,
+  transferLead,
   updateStatus,
   type FormState,
 } from "@/app/actions/leads";
@@ -137,6 +138,35 @@ export function ReassignSelect({
       ))}
     </select>
   );
+}
+
+export function TransferLeadControls({ leadId, currentOwnerId, users, isAdmin }: { leadId: string; currentOwnerId: string; users: { id: string; displayName: string }[]; isAdmin: boolean }) {
+  const router = useRouter();
+  const { tenant } = useParams<{ tenant: string }>();
+  const [target, setTarget] = useState("");
+  const [error, setError] = useState("");
+  const [pending, start] = useTransition();
+  const colleagues = users.filter((item) => item.id !== currentOwnerId);
+
+  function submit() {
+    if (!target) return setError("Bitte einen Mitarbeiter oder den Pool auswählen.");
+    if (target === "pool" && !window.confirm("Lead in den freien Pool legen? Offene Termine für diesen Lead werden entfernt.")) return;
+    setError("");
+    start(async () => {
+      const result = await transferLead(leadId, target === "pool" ? null : target);
+      if (result.error) return setError(result.error);
+      if (isAdmin) router.refresh();
+      else router.push(`/${tenant}/leads`);
+    });
+  }
+
+  return <div className="w-full rounded-xl border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-left sm:w-80">
+    <label htmlFor={`transfer-${leadId}`} className="label">Lead übergeben</label>
+    <p className="mb-2 text-xs text-slate-600">An einen Kollegen geben oder in den freien Pool legen.</p>
+    <select id={`transfer-${leadId}`} value={target} onChange={(event) => setTarget(event.target.value)} className="input mb-2"><option value="">Bitte auswählen …</option>{colleagues.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}<option value="pool">Zurück in den Pool</option></select>
+    <button type="button" disabled={pending} onClick={submit} className="btn-primary w-full">{pending ? "Übergabe läuft …" : "Lead übergeben"}</button>
+    {error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}
+  </div>;
 }
 
 type ContactProps = {
