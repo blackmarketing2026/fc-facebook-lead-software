@@ -6,6 +6,7 @@ import { requirePlatformAdmin } from "@/lib/session";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 import { PlatformGrantForm } from "./platform-grant-form";
 import { TenantMasterPasswordForm } from "../platform-forms";
+import { LoginLink } from "../login-link";
 
 export const metadata = { title: "Mitglieder Plattformen" };
 
@@ -59,6 +60,7 @@ export default async function PlatformMembersPage() {
             {t.isDevelopment && <span className="badge bg-violet-100 text-violet-800">Entwicklung</span>}
             {t.status === "SUSPENDED" && <span className="badge bg-red-100 text-red-700">gesperrt</span>}
             <div className="ml-auto flex items-center gap-2">
+              <LoginLink slug={t.slug} fullLabels />
               <Link href={tenantPath(admin.tenant.slug, `/platform/tenants/${t.id}`)} className="btn-secondary px-2 py-1 text-xs">
                 Verwalten
               </Link>
