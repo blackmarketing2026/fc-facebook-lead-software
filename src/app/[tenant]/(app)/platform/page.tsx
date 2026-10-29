@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requirePlatformManager } from "@/lib/session";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 import { CreateTenantForm } from "./platform-forms";
+import { LoginLink } from "./login-link";
 
 export const metadata = { title: "Plattformen" };
 
@@ -57,7 +58,7 @@ export default async function PlatformPage() {
                     {t.id === admin.tenantId && <span className="badge bg-slate-900 text-white">Plattform</span>}
                   </div>
                 </td>
-                <td className="px-4 py-3 font-mono text-slate-600">/{t.slug}</td>
+                <td className="px-4 py-3 font-mono text-slate-600"><div>/{t.slug}</div>{master && <div className="mt-2 font-sans"><LoginLink slug={t.slug} /></div>}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{t._count.leads}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{t._count.users}</td>
                 <td className="px-4 py-3">
