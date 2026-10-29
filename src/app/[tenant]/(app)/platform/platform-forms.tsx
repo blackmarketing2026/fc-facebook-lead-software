@@ -40,7 +40,7 @@ function AdminFields() {
       </label>
       <label className="block">
         <span className="label">Startpasswort</span>
-        <input name="adminPassword" type="password" required minLength={8} className="input" autoComplete="new-password" />
+        <input name="adminPassword" type="password" required minLength={5} className="input" autoComplete="new-password" />
       </label>
     </>
   );
@@ -168,8 +168,8 @@ export function TenantMasterPasswordForm({ tenantId, userId }: { tenantId: strin
   const ref = useResetOnOk(state);
   return (
     <form ref={ref} action={action} className="mt-4 grid gap-3 border-t border-blue-100 pt-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-      <label><span className="label">Neues Passwort</span><input name="password" type="password" required minLength={8} maxLength={128} autoComplete="new-password" className="input" /></label>
-      <label><span className="label">Passwort bestätigen</span><input name="passwordConfirm" type="password" required minLength={8} maxLength={128} autoComplete="new-password" className="input" /></label>
+      <label><span className="label">Neues Passwort</span><input name="password" type="password" required minLength={5} autoComplete="new-password" className="input" /></label>
+      <label><span className="label">Passwort bestätigen</span><input name="passwordConfirm" type="password" required minLength={5} autoComplete="new-password" className="input" /></label>
       <button disabled={pending} className="btn-secondary">{pending ? "Speichern …" : "Passwort setzen"}</button>
       <div className="sm:col-span-3" role="status"><Feedback state={state} /></div>
     </form>

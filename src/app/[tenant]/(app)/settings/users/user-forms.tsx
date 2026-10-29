@@ -29,7 +29,7 @@ function Fields({ user, passwordRequired }: { user?: UserData; passwordRequired:
           name="password"
           type="password"
           required={passwordRequired}
-          minLength={8}
+          minLength={5}
           className="input"
           autoComplete="new-password"
         />

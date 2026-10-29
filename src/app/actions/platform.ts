@@ -47,7 +47,7 @@ function refresh(tenantId?: string) {
 const adminSchema = z.object({
   adminDisplayName: z.string().trim().min(1, "Name des Admins fehlt").max(60),
   adminEmail: z.string().trim().toLowerCase().pipe(z.email("Ungültige E-Mail-Adresse des Admins")),
-  adminPassword: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben"),
+  adminPassword: z.string().min(5, "Passwort muss mindestens 5 Zeichen haben"),
 });
 
 const tenantSchema = z.object({
@@ -226,8 +226,7 @@ export async function setAdminSalesEnabled(tenantId: string, userId: string, ena
 export async function setTenantMasterPassword(tenantId: string, userId: string, _prev: PlatformState, formData: FormData): Promise<PlatformState> {
   await requirePlatformAdmin();
   const password = String(formData.get("password") ?? "");
-  if (password.length < 8) return { error: "Das Passwort muss mindestens 8 Zeichen haben." };
-  if (password.length > 128) return { error: "Das Passwort darf höchstens 128 Zeichen haben." };
+  if (password.length < 5) return { error: "Das Passwort muss mindestens 5 Zeichen haben." };
   if (password !== formData.get("passwordConfirm")) return { error: "Die Passwörter stimmen nicht überein." };
 
   const master = await db.user.findFirst({

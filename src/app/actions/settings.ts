@@ -23,7 +23,7 @@ const userSchema = z.object({
   role: z.enum(["ADMIN", "SALES"]),
 });
 
-const passwordSchema = z.string().min(8, "Passwort muss mindestens 8 Zeichen haben");
+const passwordSchema = z.string().min(5, "Passwort muss mindestens 5 Zeichen haben");
 
 function firstError(err: z.ZodError) {
   return err.issues[0]?.message ?? "Ungültige Eingabe";
