@@ -12,7 +12,7 @@ import { sendPushToUser } from "@/lib/push";
 import { mailerConfigured } from "@/lib/mailer";
 import { sendReminderMail } from "@/lib/reminder-mail";
 import { REMINDER_TYPE_KEYS, reminderLabel } from "@/lib/reminder-types";
-import { STATUSES } from "@/lib/labels";
+import { statusesForTenant } from "@/lib/labels";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
 
@@ -25,11 +25,11 @@ function refreshLead() {
 export async function updateStatus(leadId: string, status: LeadStatus) {
   const user = await requireUser();
   await getAccessibleLeadOr404(user, leadId);
-  if (!STATUSES.includes(status)) throw new Error("Ungültiger Status");
   // Abschluss nur mit Provision (closeLead).
   if (status === "ABGESCHLOSSEN") throw new Error("Für den Abschluss bitte die Provision angeben");
 
-  const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { status: true } });
+  const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { status: true, tenant: { select: { slug: true } } } });
+  if (!statusesForTenant(lead.tenant.slug).includes(status)) throw new Error("Ungültiger Status");
   if (lead.status === status) return;
   await db.lead.update({
     where: { id: leadId },

@@ -4,7 +4,7 @@ import { leadScope } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime, parseBerlinLocal, TIMEZONE } from "@/lib/format";
 import { googleCalendarUrl } from "@/lib/ics";
-import { STATUS_LABELS, STATUSES } from "@/lib/labels";
+import { STATUS_LABELS, statusesForTenant } from "@/lib/labels";
 import { reminderEvent } from "@/lib/reminder-calendar";
 import { REMINDER_LEAD_MINUTES, reminderIcon, reminderLabel } from "@/lib/reminder-types";
 import { requireUser } from "@/lib/session";
@@ -193,7 +193,7 @@ async function AdminStats({ tenantId, slug, todayStart }: { tenantId: string; sl
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Status-Übersicht</h2>
         <ul className="space-y-2 text-sm">
-          {STATUSES.map((s) => (
+          {statusesForTenant(slug).map((s) => (
             <li key={s} className="flex items-center justify-between">
               <Link href={tenantPath(slug, `/leads?status=${s}`)} className="hover:underline">
                 {STATUS_LABELS[s]}

@@ -3,7 +3,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { db } from "@/lib/db";
 import { hasFeature } from "@/lib/features";
 import { formatDateTime } from "@/lib/format";
-import { STATUS_LABELS, STATUSES } from "@/lib/labels";
+import { STATUS_LABELS, STATUSES, statusesForTenant } from "@/lib/labels";
 import { seesAllTenants } from "@/lib/access";
 import { leadListFilters, leadListWhere } from "@/lib/lead-filters";
 import { requireUser } from "@/lib/session";
@@ -74,7 +74,7 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
         <input name="q" defaultValue={q} placeholder="Name, E-Mail, Telefon …" className="input lg:col-span-2" />
         <select name="status" defaultValue={status} className="input">
           <option value="">Alle Status</option>
-          {STATUSES.map((s) => (
+          {(allTenants ? STATUSES : statusesForTenant(user.tenant.slug)).map((s) => (
             <option key={s} value={s}>
               {STATUS_LABELS[s]}
             </option>

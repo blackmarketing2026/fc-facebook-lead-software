@@ -6,7 +6,7 @@ import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatEuro } from "@/lib/commission";
 import { formatDateTime, telHref, TIMEZONE, whatsappNumber } from "@/lib/format";
-import { ACTIVITY_LABELS, STATUS_LABELS } from "@/lib/labels";
+import { ACTIVITY_LABELS, STATUS_LABELS, statusesForTenant } from "@/lib/labels";
 import { googleCalendarUrl } from "@/lib/ics";
 import { isContactKey } from "@/lib/lead-parser";
 import { reminderEvent } from "@/lib/reminder-calendar";
@@ -58,7 +58,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
   const lead = await db.lead.findUniqueOrThrow({
       where: { id },
       include: {
-        tenant: { select: { id: true, name: true, code: true } },
+        tenant: { select: { id: true, name: true, code: true, slug: true } },
         assignedTo: { select: { id: true, displayName: true } },
         answers: { orderBy: { position: "asc" } },
         notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { displayName: true } } } },
@@ -113,7 +113,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-slate-500">Status</span>
-              <StatusSelect leadId={lead.id} status={lead.status} commission={lead.commission?.toNumber() ?? null} />
+              <StatusSelect leadId={lead.id} status={lead.status} commission={lead.commission?.toNumber() ?? null} statuses={statusesForTenant(lead.tenant.slug)} />
             </div>
             {lead.assignedToId && (user.role === "ADMIN" || lead.assignedToId === user.id) && <TransferLeadControls leadId={lead.id} currentOwnerId={lead.assignedToId} users={salesUsers.filter((member) => !member.distPaused && !member.absenceReason)} isAdmin={user.role === "ADMIN"} />}
             <div className="flex flex-wrap items-center gap-2">

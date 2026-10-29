@@ -16,11 +16,11 @@ import {
   type FormState,
 } from "@/app/actions/leads";
 import { formatEuro } from "@/lib/commission";
-import { STATUS_LABELS, STATUSES } from "@/lib/labels";
+import { STATUS_LABELS } from "@/lib/labels";
 import { DURATION_OPTIONS, formatDuration, REMINDER_LEAD_MINUTES, REMINDER_TYPE_KEYS, REMINDER_TYPES } from "@/lib/reminder-types";
 
 /** Status-Auswahl; "Abgeschlossen" fragt die Provisionseinnahme ab (Pflicht). */
-export function StatusSelect({ leadId, status, commission }: { leadId: string; status: LeadStatus; commission: number | null }) {
+export function StatusSelect({ leadId, status, commission, statuses }: { leadId: string; status: LeadStatus; commission: number | null; statuses: LeadStatus[] }) {
   const [pending, start] = useTransition();
   const [closing, setClosing] = useState(false);
   const [amount, setAmount] = useState("");
@@ -55,7 +55,7 @@ export function StatusSelect({ leadId, status, commission }: { leadId: string; s
         }}
         aria-label="Status"
       >
-        {STATUSES.map((s) => (
+        {statuses.map((s) => (
           <option key={s} value={s}>
             {STATUS_LABELS[s]}
           </option>
