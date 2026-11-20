@@ -1,5 +1,6 @@
 import webpush from "web-push";
 import { db } from "./db";
+import { isRestrictedUser, isTenantLocked } from "./access-lock";
 
 let configured: boolean | null = null;
 
@@ -21,6 +22,10 @@ export type PushMessage = { title: string; body: string; url: string; tag?: stri
 
 /** Schickt eine Push-Nachricht an alle registrierten Browser eines Benutzers. */
 export async function sendPushToUser(userId: string, message: PushMessage): Promise<number> {
+  const user = await db.user.findUnique({ where: { id: userId },
+    select: { username: true, displayName: true, active: true, isPlatformAdmin: true,
+      tenant: { select: { slug: true, name: true, status: true } } } });
+  if (!user || !user.active || isRestrictedUser(user) || isTenantLocked(user.tenant)) return 0;
   if (!configure()) return 0;
   const subs = await db.pushSubscription.findMany({ where: { userId } });
   let sent = 0;

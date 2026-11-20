@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isRestrictedUser, isTenantLocked } from "@/lib/access-lock";
 import { buildIcsCalendar } from "@/lib/ics";
 import { REMINDER_CALENDAR_SELECT, reminderEvent } from "@/lib/reminder-calendar";
 import { PLATFORM_TENANT_SLUG, PRODUCT_NAME } from "@/lib/tenant-paths";
@@ -16,10 +17,10 @@ export async function GET(_request: Request, ctx: RouteContext<"/[tenant]/api/ca
 
   const user = await db.user.findUnique({
     where: { calendarToken: cleanToken },
-    select: { id: true, active: true, displayName: true, tenant: { select: { slug: true, name: true, status: true } } },
+    select: { id: true, active: true, username: true, displayName: true, isPlatformAdmin: true, tenant: { select: { slug: true, name: true, status: true } } },
   });
   // Der Token allein identifiziert den Benutzer; Links zeigen immer auf sein eigenes Dashboard.
-  if (!user || !user.active || user.tenant.status !== "ACTIVE") {
+  if (!user || !user.active || isRestrictedUser(user) || isTenantLocked(user.tenant)) {
     return new Response("Nicht gefunden", { status: 404 });
   }
 

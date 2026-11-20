@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
+import { isTenantLocked } from "./access-lock";
 import { assignNextSalesUser } from "./distribution";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
 import { parseLeadText, type ParsedAnswer } from "./lead-parser";
@@ -146,6 +147,8 @@ async function createLead(
 }
 
 async function notifyNewLead(tenantId: string, leadId: string, name: string | null, userId: string | null) {
+  const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { slug: true, name: true, status: true } });
+  if (isTenantLocked(tenant)) return;
   const masterEmail = await sendMasterLeadMail(leadId).catch((err) => {
     console.error("[mail:master]", err);
     return null;
@@ -155,7 +158,6 @@ async function notifyNewLead(tenantId: string, leadId: string, name: string | nu
   if (userId) await sendAssigneeLeadMail(leadId).catch((err) => console.error("[mail]", err));
 
   // Push an den zugewiesenen Vertriebler, die Admins des Dashboards und den Hauptaccount (sieht alle Dashboards).
-  const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { slug: true, name: true } });
   const [admins, mainAccounts] = await Promise.all([
     db.user.findMany({ where: { tenantId, role: "ADMIN", active: true }, select: { id: true } }),
     db.user.findMany({

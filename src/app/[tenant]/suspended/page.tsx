@@ -7,7 +7,8 @@ export default async function SuspendedPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md rounded-xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
-        <h1 className="text-xl font-semibold text-slate-900">{displayName(tenant)}</h1>
+        <p className="mb-2 text-sm text-slate-500">{displayName(tenant)}</p>
+        <h1 className="text-xl font-semibold text-red-700">Zugriff verweigert</h1>
         <p className="mt-3 text-sm text-slate-600">
           Dieses Dashboard ist derzeit gesperrt. Bitte wende dich an Function Concept.
         </p>

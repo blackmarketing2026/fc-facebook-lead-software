@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { isRestrictedUser, isTenantLocked } from "./access-lock";
 import { formatDateTime, telHref, whatsappNumber } from "./format";
 import { isContactKey } from "./lead-parser";
 import { escapeHtml, parseEmailList, sendMail } from "./mailer";
@@ -141,11 +142,12 @@ export async function sendMasterLeadMail(leadId: string): Promise<string | null>
     where: { id: leadId },
     select: {
       id: true, fullName: true, email: true, phone: true, language: true, receivedAt: true,
-      tenant: { select: { slug: true, name: true } },
+      tenant: { select: { slug: true, name: true, status: true } },
       assignedTo: { select: { displayName: true } },
       answers: { orderBy: { position: "asc" }, select: { questionKey: true, questionLabel: true, answers: true } },
     },
   });
+  if (isTenantLocked(lead.tenant)) return null;
   const mail = buildMasterLeadMail(lead.tenant, { ...lead, assignedTo: lead.assignedTo?.displayName ?? null });
   const sent = await sendMail({ to: [master.email], ...mail });
   return sent ? master.email : null;
@@ -155,8 +157,9 @@ export async function sendMasterLeadMail(leadId: string): Promise<string | null>
 export async function sendLeadNotificationMail(tenantId: string, leadId: string, excludeEmail?: string): Promise<void> {
   const tenant = await db.tenant.findUniqueOrThrow({
     where: { id: tenantId },
-    select: { slug: true, name: true, leadNotifyEmails: true },
+    select: { slug: true, name: true, status: true, leadNotifyEmails: true },
   });
+  if (isTenantLocked(tenant)) return;
   const to = parseEmailList(tenant.leadNotifyEmails).filter((email) => email.toLowerCase() !== excludeEmail?.toLowerCase());
   if (to.length === 0) return;
   const lead = await db.lead.findUniqueOrThrow({
@@ -177,18 +180,20 @@ export async function sendAssigneeLeadMail(leadId: string): Promise<AssigneeMail
       id: true,
       fullName: true,
       receivedAt: true,
-      tenant: { select: { id: true, slug: true, name: true } },
-      assignedTo: { select: { displayName: true, email: true, active: true, notifyNewLeadEmail: true, absenceReason: true, substituteId: true } },
+      tenant: { select: { id: true, slug: true, name: true, status: true } },
+      assignedTo: { select: { username: true, displayName: true, isPlatformAdmin: true, email: true, active: true, notifyNewLeadEmail: true, absenceReason: true, substituteId: true } },
       answers: { orderBy: { position: "asc" }, select: { questionKey: true, questionLabel: true, answers: true } },
     },
   });
+  if (isTenantLocked(lead.tenant)) return { sent: false, reason: "Plattform gesperrt." };
   const user = lead.assignedTo;
   if (!user) return { sent: false, reason: "Der Lead ist niemandem zugewiesen." };
   const substitute = user.absenceReason && user.substituteId
-    ? await db.user.findFirst({ where: { id: user.substituteId, tenantId: lead.tenant.id, active: true, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }], absenceReason: null }, select: { displayName: true, email: true, notifyNewLeadEmail: true } })
+    ? await db.user.findFirst({ where: { id: user.substituteId, tenantId: lead.tenant.id, active: true, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }], absenceReason: null }, select: { username: true, displayName: true, isPlatformAdmin: true, active: true, email: true, notifyNewLeadEmail: true } })
     : null;
   const recipient = substitute || user;
-  if (!user.active) return { sent: false, reason: `${user.displayName} ist deaktiviert.` };
+  if (!user.active || isRestrictedUser(user)) return { sent: false, reason: `${user.displayName} ist deaktiviert.` };
+  if (!recipient.active || isRestrictedUser(recipient)) return { sent: false, reason: "Empfänger deaktiviert." };
   if (user.absenceReason && !substitute) return { sent: false, reason: `Für ${user.displayName} ist keine verfügbare Vertretung hinterlegt.` };
   if (!recipient.notifyNewLeadEmail) return { sent: false, reason: `Bei ${recipient.displayName} ist „E-Mail bei neuem Lead“ ausgeschaltet.` };
   if (!recipient.email) return { sent: false, reason: `${recipient.displayName} hat keine E-Mail-Adresse.` };

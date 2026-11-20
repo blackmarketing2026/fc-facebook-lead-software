@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { displayName, requireTenant } from "@/lib/tenant";
+import { isTenantLocked } from "@/lib/access-lock";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "@/lib/tenant-paths";
 import { LoginForm } from "./login-form";
 
@@ -7,7 +8,7 @@ export const metadata = { title: "Anmelden" };
 
 export default async function LoginPage() {
   const tenant = await requireTenant();
-  if (tenant.status === "SUSPENDED") redirect(tenantPath(tenant.slug, "/suspended"));
+  if (isTenantLocked(tenant)) redirect(tenantPath(tenant.slug, "/denied"));
   const master = tenant.slug === PLATFORM_TENANT_SLUG;
   const name = master ? "Function Concept" : displayName(tenant);
   const initials = name.split(/\s+/).map((word) => word[0]).join("").slice(0, 2).toUpperCase();

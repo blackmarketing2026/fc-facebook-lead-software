@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import type { Role } from "@prisma/client";
 import { db } from "./db";
+import { isRestrictedUser, isTenantLocked } from "./access-lock";
 import { PLATFORM_TENANT_SLUG, tenantLoginPath, tenantPath } from "./tenant-paths";
 import { getTenant } from "./tenant";
 
@@ -77,7 +78,8 @@ export const getCurrentUser = cache(async () => {
       platformGrants: { select: { tenantId: true } },
     },
   });
-  if (!user?.active) return null;
+  if (!user?.active || isRestrictedUser(user)) return null;
+  if (isTenantLocked(tenant) && !(session.operator && user.isPlatformAdmin && user.tenant.slug === PLATFORM_TENANT_SLUG)) return null;
 
   if (session.operator) {
     // Jede Anfrage prüft die aktuelle Freigabe erneut, auch bei bestehender Session.
@@ -96,9 +98,16 @@ export async function requireUser() {
   const tenant = await getTenant();
   if (!tenant) notFound();
   const user = await getCurrentUser();
-  if (!user) redirect(tenantLoginPath(tenant.slug));
-  // Gesperrte Dashboards: nur der Plattform-Admin kommt noch hinein.
-  if (tenant.status === "SUSPENDED" && !user.operator) redirect(tenantPath(tenant.slug, "/suspended"));
+  if (!user) {
+    if (isTenantLocked(tenant)) redirect(tenantPath(tenant.slug, "/denied"));
+    const session = await readSession();
+    if (session?.tenantId === tenant.id) {
+      const account = await db.user.findUnique({ where: { id: session.userId }, select: { active: true, username: true, displayName: true, isPlatformAdmin: true } });
+      if (account && (!account.active || isRestrictedUser(account))) redirect(tenantPath(tenant.slug, "/denied"));
+    }
+    redirect(tenantLoginPath(tenant.slug));
+  }
+  if (isTenantLocked(tenant) && !(user.operator && user.isPlatformAdmin)) redirect(tenantPath(tenant.slug, "/denied"));
   return user;
 }
 
