@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { WaitUnit } from "@prisma/client";
+import { parseBerlinLocal, TIMEZONE } from "./format";
 
 export const WAIT_UNIT_LABELS: Record<WaitUnit, string> = { MINUTES: "Minuten", HOURS: "Stunden", DAYS: "Tage" };
 export const MAX_WAIT_DAYS = 365;
@@ -14,16 +15,47 @@ export function waitMs(value: number, unit: WaitUnit): number {
   return Math.max(0, Math.round(value)) * UNIT_MS[unit];
 }
 
-/** Ist die Wartezeit erlaubt (1 Minute bis 365 Tage)? */
-export function validWait(value: number, unit: WaitUnit): boolean {
+export const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Ist die Wartezeit erlaubt? Ohne Uhrzeit: 1 Minute bis 365 Tage.
+ * Mit Uhrzeit (nur Einheit „Tage“): 0 bis 365 Kalendertage, Uhrzeit im Format HH:MM.
+ */
+export function validWait(value: number, unit: WaitUnit, time?: string | null): boolean {
+  if (!Number.isInteger(value)) return false;
+  if (time) return unit === "DAYS" && TIME_RE.test(time) && value >= 0 && value <= MAX_WAIT_DAYS;
   const ms = waitMs(value, unit);
-  return Number.isInteger(value) && value >= 1 && ms >= 60_000 && ms <= MAX_WAIT_DAYS * UNIT_MS.DAYS;
+  return value >= 1 && ms >= 60_000 && ms <= MAX_WAIT_DAYS * UNIT_MS.DAYS;
+}
+
+/** Kalendertag in Berlin als YYYY-MM-DD. */
+function berlinDay(d: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(d);
+}
+
+function addDays(day: string, days: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * Zeitpunkt, an dem es nach einem Wartezeit-Schritt weitergeht.
+ * Ohne Uhrzeit: jetzt + Dauer. Mit Uhrzeit: der Kalendertag „heute + N Tage“ um HH:MM Uhr (Berlin) – also nicht „24 Stunden warten und dann zur nächsten Uhrzeit“.
+ * Liegt dieser Zeitpunkt nicht in der Zukunft (nur bei 0 Tagen), gilt der nächste Tag.
+ */
+export function waitTarget(now: Date, value: number, unit: WaitUnit, time?: string | null): Date {
+  if (!time || unit !== "DAYS" || !TIME_RE.test(time)) return new Date(now.getTime() + waitMs(value, unit));
+  const day = berlinDay(now);
+  let target = parseBerlinLocal(`${addDays(day, Math.max(0, value))}T${time}`);
+  if (target.getTime() <= now.getTime()) target = parseBerlinLocal(`${addDays(day, Math.max(0, value) + 1)}T${time}`);
+  return target;
 }
 
 /** „2 Tage“, „1 Stunde“ … für die Anzeige. */
-export function describeWait(value: number, unit: WaitUnit): string {
+export function describeWait(value: number, unit: WaitUnit, time?: string | null): string {
   const singular: Record<WaitUnit, string> = { MINUTES: "Minute", HOURS: "Stunde", DAYS: "Tag" };
-  return `${value} ${value === 1 ? singular[unit] : WAIT_UNIT_LABELS[unit]}`;
+  const base = `${value} ${value === 1 ? singular[unit] : WAIT_UNIT_LABELS[unit]}`;
+  return time && unit === "DAYS" ? `${base}, dann um ${time} Uhr` : base;
 }
 
 export function firstName(fullName: string | null | undefined): string {

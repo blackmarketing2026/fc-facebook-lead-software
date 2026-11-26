@@ -38,7 +38,7 @@ export default async function ChainPage(props: PageProps<"/[tenant]/email-chains
 
       <ChainEditor
         chain={{ id: chain.id, name: chain.name, active: chain.active, tag: chain.triggerTag.name }}
-        steps={chain.steps.map((s) => ({ id: s.id, type: s.type, subject: s.subject ?? "", body: s.body ?? "", waitValue: s.waitValue ?? 1, waitUnit: s.waitUnit ?? "DAYS" }))}
+        steps={chain.steps.map((s) => ({ id: s.id, type: s.type, subject: s.subject ?? "", body: s.body ?? "", waitValue: s.waitValue ?? 1, waitUnit: s.waitUnit ?? "DAYS", waitTime: s.waitTime ?? "" }))}
         knownTags={tags.map((t) => t.name)}
         testEmail={admin.email}
       />

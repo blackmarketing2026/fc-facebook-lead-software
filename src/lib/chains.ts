@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
-import { renderTemplate, SENDER_LINES, textToHtml, unsubscribeToken, varsForLead, waitMs } from "./chain-logic";
+import { renderTemplate, SENDER_LINES, textToHtml, unsubscribeToken, varsForLead, waitTarget } from "./chain-logic";
 import { absoluteUrl } from "./lead-notify-mail";
 import { sendMail } from "./mailer";
 import { tenantPath } from "./tenant-paths";
@@ -135,7 +135,7 @@ export async function processChains(now = new Date()): Promise<ProcessSummary> {
       // Erst den Fortschritt speichern, dann senden: lieber eine Mail auslassen als doppelt schicken.
       position++;
       if (step.type === "WAIT") {
-        const at = new Date(Date.now() + waitMs(step.waitValue ?? 1, step.waitUnit ?? "DAYS"));
+        const at = waitTarget(new Date(), step.waitValue ?? 1, step.waitUnit ?? "DAYS", step.waitTime);
         await db.chainRun.update({ where: { id: run.id }, data: { currentStep: position, nextRunAt: at } });
         settled = true;
         break;

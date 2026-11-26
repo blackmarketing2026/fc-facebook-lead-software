@@ -340,6 +340,8 @@ model EmailChainStep {
   /// WAIT
   waitValue Int?
   waitUnit  WaitUnit?
+  /// Optional (nur bei Tagen): Uhrzeit "HH:MM" (Berlin), zu der es nach der Wartezeit weitergeht.
+  waitTime  String?       @db.VarChar(5)
 
   @@index([chainId, position])
 }

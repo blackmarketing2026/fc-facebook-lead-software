@@ -93,16 +93,20 @@ export async function addStep(chainId: string, index: number, type: "EMAIL" | "W
 }
 
 const emailStepSchema = z.object({ subject: z.string().trim().max(300), body: z.string().max(20000) });
-const waitStepSchema = z.object({ waitValue: z.coerce.number().int(), waitUnit: z.nativeEnum(WaitUnit) });
+const waitStepSchema = z.object({ waitValue: z.coerce.number().int(), waitUnit: z.nativeEnum(WaitUnit), waitTime: z.string().trim().max(5).optional() });
 
 export async function updateStep(stepId: string, _prev: ChainState, formData: FormData): Promise<ChainState> {
   const admin = await requireAdmin();
   const step = await db.emailChainStep.findFirst({ where: { id: stepId, chain: { tenantId: admin.tenantId } } });
   if (!step) return { error: "Schritt nicht gefunden." };
   if (step.type === "WAIT") {
-    const parsed = waitStepSchema.safeParse({ waitValue: formData.get("waitValue"), waitUnit: formData.get("waitUnit") });
-    if (!parsed.success || !validWait(parsed.data.waitValue, parsed.data.waitUnit)) return { error: "Wartezeit: ganze Zahl, mindestens 1 Minute und höchstens 365 Tage." };
-    await db.emailChainStep.update({ where: { id: stepId }, data: parsed.data });
+    const useTime = formData.get("useTime") === "on";
+    const parsed = waitStepSchema.safeParse({ waitValue: formData.get("waitValue"), waitUnit: formData.get("waitUnit"), waitTime: useTime ? formData.get("waitTime") : undefined });
+    const time = useTime ? parsed.data?.waitTime || null : null;
+    if (!parsed.success || (useTime && !time) || !validWait(parsed.data.waitValue, parsed.data.waitUnit, time)) {
+      return { error: useTime ? "Mit Uhrzeit: Einheit Tage, 0 bis 365 Tage und Uhrzeit wie 08:00." : "Wartezeit: ganze Zahl, mindestens 1 Minute und höchstens 365 Tage." };
+    }
+    await db.emailChainStep.update({ where: { id: stepId }, data: { waitValue: parsed.data.waitValue, waitUnit: parsed.data.waitUnit, waitTime: time } });
   } else {
     const parsed = emailStepSchema.safeParse({ subject: formData.get("subject"), body: formData.get("body") });
     if (!parsed.success) return { error: "Betreff (max. 300 Zeichen) oder Text ist ungültig." };

@@ -3,7 +3,7 @@
 import { useActionState, useRef, useState, useTransition } from "react";
 import { addStep, deleteChain, deleteStep, moveStep, sendTestStep, setChainActive, updateChain, updateStep, type ChainState } from "@/app/actions/chains";
 
-type StepData = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS" };
+type StepData = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS"; waitTime: string };
 /** `key` bleibt stabil, auch wenn aus der vorläufigen ID nach dem Speichern die echte wird. */
 type Step = StepData & { key: string; saving?: boolean };
 type Chain = { id: string; name: string; active: boolean; tag: string };
@@ -35,7 +35,7 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail }
   // Änderungen erscheinen sofort; der Server zieht im Hintergrund nach. Bei einem Fehler wird der alte Stand wiederhergestellt.
   function insert(index: number, type: "EMAIL" | "WAIT") {
     const key = `tmp-${++tempCounter.current}`;
-    const fresh: Step = { key, id: key, type, subject: "", body: "", waitValue: 1, waitUnit: "DAYS", saving: true };
+    const fresh: Step = { key, id: key, type, subject: "", body: "", waitValue: 1, waitUnit: "DAYS", waitTime: "", saving: true };
     const before = steps;
     setSteps((cur) => [...cur.slice(0, index), fresh, ...cur.slice(index)]);
     void addStep(chain.id, index, type).then((res) => {
@@ -206,34 +206,14 @@ function StepCard(props: CardProps) {
       const res = await updateStep(step.id, undefined, form);
       setState(res);
       if (res?.ok) {
-        if (step.type === "WAIT") onSaved(step.key, { waitValue: Number(form.get("waitValue")), waitUnit: String(form.get("waitUnit")) as StepData["waitUnit"] });
+        if (step.type === "WAIT") onSaved(step.key, { waitValue: Number(form.get("waitValue")), waitUnit: String(form.get("waitUnit")) as StepData["waitUnit"], waitTime: form.get("useTime") === "on" ? String(form.get("waitTime") ?? "") : "" });
         else onSaved(step.key, { subject: String(form.get("subject") ?? "").trim(), body: String(form.get("body") ?? "") });
       }
     });
   };
   const disabled = pending || Boolean(step.saving);
 
-  if (step.type === "WAIT") {
-    return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-amber-900">⏱ Wartezeit {step.saving && <span className="font-normal text-amber-700">· wird angelegt …</span>}</span>
-          <StepControls {...props} />
-        </div>
-        <form onSubmit={submit} className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-sm text-amber-900">Warte</span>
-          <input name="waitValue" type="number" min={1} defaultValue={step.waitValue} className="input !w-24" aria-label="Dauer" />
-          <select name="waitUnit" defaultValue={step.waitUnit} className="input !w-auto" aria-label="Einheit">
-            {Object.entries(UNITS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-          <button disabled={disabled} className="btn-secondary !py-1.5 text-sm">{pending ? "…" : "Speichern"}</button>
-          <Status state={state} />
-        </form>
-      </div>
-    );
-  }
+  if (step.type === "WAIT") return <WaitCard {...props} submit={submit} state={state} disabled={disabled} pending={pending} />;
 
   return <EmailCard {...props} submit={submit} state={state} disabled={disabled} pending={pending} />;
 }
@@ -276,6 +256,54 @@ function EmailCard({ step, index, total, testEmail, onMove, onRemove, submit, st
           </div>
         </form>
       )}
+    </div>
+  );
+}
+
+function WaitCard({ step, index, total, onMove, onRemove, submit, state, disabled, pending }: CardProps & { submit: (e: React.FormEvent<HTMLFormElement>) => void; state: ChainState; disabled: boolean; pending: boolean }) {
+  const [unit, setUnit] = useState(step.waitUnit);
+  const [useTime, setUseTime] = useState(Boolean(step.waitTime));
+  const timeAllowed = unit === "DAYS";
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-amber-900">⏱ Wartezeit {step.saving && <span className="font-normal text-amber-700">· wird angelegt …</span>}</span>
+        <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} />
+      </div>
+      <form onSubmit={submit} className="mt-2 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-amber-900">Warte</span>
+          <input name="waitValue" type="number" min={useTime && timeAllowed ? 0 : 1} defaultValue={step.waitValue} className="input !w-24" aria-label="Dauer" />
+          <select name="waitUnit" value={unit} onChange={(e) => setUnit(e.target.value as StepData["waitUnit"])} className="input !w-auto" aria-label="Einheit">
+            {Object.entries(UNITS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </div>
+        {timeAllowed && (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-sm text-amber-900">
+              <input type="checkbox" name="useTime" checked={useTime} onChange={(e) => setUseTime(e.target.checked)} className="h-4 w-4" />
+              dann zu fester Uhrzeit
+            </label>
+            {useTime && (
+              <>
+                <input name="waitTime" type="time" defaultValue={step.waitTime || "08:00"} required className="input !w-32" aria-label="Uhrzeit" />
+                <span className="text-sm text-amber-900">Uhr</span>
+              </>
+            )}
+          </div>
+        )}
+        {useTime && timeAllowed && (
+          <p className="text-xs text-amber-800">
+            Gezählt wird in Kalendertagen: {Number(step.waitValue) === 0 ? "Die nächste E-Mail geht heute zur gewählten Uhrzeit raus (ist sie schon vorbei, morgen)." : "Eine E-Mail, die z. B. um 8:01 Uhr rausgeht, bekommt bei „1 Tag, 08:00 Uhr“ die nächste am Folgetag um 8:00 Uhr (nicht erst übermorgen)."}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <button disabled={disabled} className="btn-secondary !py-1.5 text-sm">{pending ? "…" : "Speichern"}</button>
+          <Status state={state} />
+        </div>
+      </form>
     </div>
   );
 }
