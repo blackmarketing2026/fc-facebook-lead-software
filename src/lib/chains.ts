@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
-import { renderTemplate, textToHtml, unsubscribeToken, varsForLead, waitMs } from "./chain-logic";
+import { renderTemplate, SENDER_LINES, textToHtml, unsubscribeToken, varsForLead, waitMs } from "./chain-logic";
 import { absoluteUrl } from "./lead-notify-mail";
 import { sendMail } from "./mailer";
 import { tenantPath } from "./tenant-paths";
@@ -70,8 +70,8 @@ export function buildChainMail(step: StepLike, lead: { id: string; fullName: str
   const subject = renderTemplate(step.subject ?? "", vars).trim();
   const body = renderTemplate(step.body ?? "", vars);
   const link = unsubscribeUrl(slug, lead.id);
-  const text = `${body}\n\n--\nKeine E-Mails mehr erhalten? Hier abmelden: ${link}`;
-  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1e293b;max-width:600px">${textToHtml(body)}<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0 12px"><p style="font-size:12px;color:#64748b;margin:0">Keine E-Mails mehr erhalten? <a href="${link}" style="color:#64748b">Hier abmelden</a></p></div>`;
+  const text = `${body}\n\n--\n${SENDER_LINES.join("\n")}\n\nKeine E-Mails mehr erhalten? Hier abmelden: ${link}`;
+  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1e293b;max-width:600px">${textToHtml(body)}<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0 12px"><p style="font-size:11px;line-height:1.5;color:#94a3b8;margin:0 0 8px">${SENDER_LINES.join("<br>").replace("support@function-concept.de", `<a href="mailto:support@function-concept.de" style="color:#94a3b8">support@function-concept.de</a>`)}</p><p style="font-size:11px;color:#94a3b8;margin:0">Keine E-Mails mehr erhalten? <a href="${link}" style="color:#94a3b8">Hier abmelden</a></p></div>`;
   return {
     subject,
     text,

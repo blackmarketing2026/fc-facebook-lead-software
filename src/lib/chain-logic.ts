@@ -4,6 +4,9 @@ import type { WaitUnit } from "@prisma/client";
 export const WAIT_UNIT_LABELS: Record<WaitUnit, string> = { MINUTES: "Minuten", HOURS: "Stunden", DAYS: "Tage" };
 export const MAX_WAIT_DAYS = 365;
 
+/** Absender-Angaben, die klein unter jeder automatischen E-Mail stehen (neben dem Abmelde-Link). */
+export const SENDER_LINES = ["Function Concept", "c/o MDC Management#169", "Welserstraße 3", "87463 Dietmannsried", "E-Mail: support@function-concept.de"];
+
 const UNIT_MS: Record<WaitUnit, number> = { MINUTES: 60_000, HOURS: 3_600_000, DAYS: 86_400_000 };
 
 /** Wartezeit in Millisekunden. */
