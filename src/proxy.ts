@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PLATFORM_TENANT_SLUG, slugFromPath, TENANT_HEADER, tenantLoginPath } from "@/lib/tenant-paths";
 
-const PUBLIC_SUBPATHS = ["/login"];
+const PUBLIC_SUBPATHS = ["/login", "/denied"];
 
 // Jeder Mandant liegt unter /<slug>/…. Grobe Vorprüfung: ohne Session-Cookie geht es zur Login-Seite
 // des Mandanten. Die echte Prüfung (Signatur, Mandant, Rolle, aktiver Benutzer) passiert serverseitig.

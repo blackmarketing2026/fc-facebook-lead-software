@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { isRestrictedUser } from "@/lib/access-lock";
 import { createSession, deleteSession } from "@/lib/session";
 import { getTenant } from "@/lib/tenant";
 import { tenantLoginPath, tenantPath } from "@/lib/tenant-paths";
@@ -24,6 +25,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     : await db.user.findUnique({ where: { tenantId_username: { tenantId: tenant.id, username: login } } });
   const valid = user && user.active && (await bcrypt.compare(password, user.passwordHash));
   if (!valid) return { error: "E-Mail oder Passwort ist falsch." };
+
+  if (isRestrictedUser(user)) redirect(tenantPath(tenant.slug, "/denied"));
 
   await createSession({ userId: user.id, tenantId: tenant.id, role: user.role }, tenant.slug);
   redirect(tenantPath(tenant.slug));

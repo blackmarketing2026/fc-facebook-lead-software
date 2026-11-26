@@ -1,4 +1,6 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { db } from "./db";
+import { isRestrictedUser, isTenantLocked } from "./access-lock";
 
 let transporter: Transporter | null | undefined;
 
@@ -63,7 +65,17 @@ export type Mail = {
 export async function sendMail(mail: Mail): Promise<boolean> {
   const t = getTransporter();
   if (!t || mail.to.length === 0) return false;
-  await t.sendMail({ from: smtpConfig().from, ...mail });
+  const members = await db.user.findMany({
+    where: { email: { in: mail.to } },
+    select: { email: true, username: true, displayName: true, active: true, isPlatformAdmin: true,
+      tenant: { select: { slug: true, name: true } } },
+  });
+  const blockedEmails = new Set(members
+    .filter((m) => !m.active || isRestrictedUser(m) || isTenantLocked(m.tenant))
+    .map((m) => m.email.toLowerCase()));
+  const to = mail.to.filter((address) => !blockedEmails.has(address.toLowerCase()));
+  if (to.length === 0) return false;
+  await t.sendMail({ from: smtpConfig().from, ...mail, to });
   return true;
 }
 

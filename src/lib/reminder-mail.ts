@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { isRestrictedUser, isTenantLocked } from "./access-lock";
 import { formatDateTime, formatTime, telHref } from "./format";
 import { buildIcs, googleCalendarUrl } from "./ics";
 import { escapeHtml, sendMail } from "./mailer";
@@ -99,11 +100,11 @@ export async function sendReminderMail(reminderId: string, createdBy: string | n
     where: { id: reminderId },
     select: {
       ...REMINDER_CALENDAR_SELECT,
-      user: { select: { displayName: true, email: true, active: true } },
+      user: { select: { username: true, displayName: true, isPlatformAdmin: true, email: true, active: true } },
       lead: { select: { ...REMINDER_CALENDAR_SELECT.lead.select, tenant: { select: { slug: true, name: true } } } },
     },
   });
-  if (!r.user.active || !r.user.email) return null;
+  if (!r.user.active || isRestrictedUser(r.user) || isTenantLocked(r.lead.tenant) || !r.user.email) return null;
   const mail = buildReminderMail(r, r.lead.tenant, { ownerName: r.user.displayName, createdBy, due });
   const sent = await sendMail({ to: [r.user.email], ...mail });
   return sent ? r.user.displayName : null;

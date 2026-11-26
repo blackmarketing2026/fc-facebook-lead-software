@@ -1,4 +1,5 @@
 import { db } from "../lib/db";
+import { isRestrictedUser, isTenantLocked } from "../lib/access-lock";
 import { formatTime } from "../lib/format";
 import { sendPushToUser } from "../lib/push";
 import { sendReminderMail } from "../lib/reminder-mail";
@@ -14,10 +15,12 @@ export async function checkReminders(): Promise<void> {
   const now = Date.now();
   const due = await db.reminder.findMany({
     where: { done: false, notifiedAt: null, dueAt: { gte: new Date(now - MAX_LATE_MS), lte: new Date(now + LEAD_TIME_MS) } },
-    include: { lead: { select: { id: true, fullName: true, tenant: { select: { slug: true } } } } },
+    include: { lead: { select: { id: true, fullName: true, tenant: { select: { slug: true, name: true } } } },
+      user: { select: { username: true, displayName: true, active: true, isPlatformAdmin: true } } },
     take: 100,
   });
   for (const r of due) {
+    if (!r.user.active || isRestrictedUser(r.user) || isTenantLocked(r.lead.tenant)) continue;
     // Erst markieren, dann senden: lieber eine Erinnerung verlieren als doppelt schicken.
     const claimed = await db.reminder.updateMany({ where: { id: r.id, notifiedAt: null }, data: { notifiedAt: new Date() } });
     if (claimed.count === 0) continue;

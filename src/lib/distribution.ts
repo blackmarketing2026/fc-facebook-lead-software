@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { isRestrictedUser, isTenantLocked } from "./access-lock";
 
 export type DistCandidate = {
   id: string;
@@ -65,15 +66,15 @@ export function rotationStartState(candidates: DistCandidate[], firstId: string 
  * Die Zeilen werden mit FOR UPDATE gesperrt, damit parallele Leads sich nicht überschneiden.
  */
 export async function assignNextSalesUser(tx: Prisma.TransactionClient, tenantId: string): Promise<string | null> {
-  const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { distributionPaused: true } });
-  if (tenant?.distributionPaused) return null;
-  const rows = await tx.$queryRaw<DistCandidate[]>`
-    SELECT id, distOrder, distWeight, distCurrent
+  const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { distributionPaused: true, slug: true, name: true } });
+  if (!tenant || tenant.distributionPaused || isTenantLocked(tenant)) return null;
+  const rows = await tx.$queryRaw<(DistCandidate & { username: string; displayName: string; isPlatformAdmin: boolean })[]>`
+    SELECT id, username, displayName, isPlatformAdmin, distOrder, distWeight, distCurrent
     FROM User
     WHERE tenantId = ${tenantId} AND (role = 'SALES' OR (role = 'ADMIN' AND salesEnabled = true)) AND active = true AND distPaused = false
     ORDER BY distOrder ASC
     FOR UPDATE`;
-  const { winnerId, updated } = pickNext(rows);
+  const { winnerId, updated } = pickNext(rows.filter((candidate) => !isRestrictedUser(candidate)));
   for (const c of updated) {
     await tx.user.update({ where: { id: c.id }, data: { distCurrent: c.distCurrent } });
   }

@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import type { Role } from "@prisma/client";
 import { db } from "./db";
+import { isRestrictedUser } from "./access-lock";
 import { tenantLoginPath, tenantPath } from "./tenant-paths";
 import { getTenant } from "./tenant";
 
@@ -69,7 +70,7 @@ export const getCurrentUser = cache(async () => {
       isTenantMaster: true,
     },
   });
-  if (!user?.active || user.tenantId !== tenant.id) return null;
+  if (!user?.active || user.tenantId !== tenant.id || isRestrictedUser(user)) return null;
   return { ...user, tenant };
 });
 
