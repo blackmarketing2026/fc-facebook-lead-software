@@ -20,6 +20,8 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
     { href: t("/calendar"), label: "Kalender", icon: "calendar" },
   ];
   const secondary: AppLink[] = user.role === "ADMIN" ? [
+    { href: t("/settings/intake"), label: "Lead-Eingang", icon: "sliders" },
+    { href: t("/settings/smtp"), label: "SMTP", icon: "mail" },
     { href: t("/settings/mailbox"), label: "Postfach", icon: "mail" },
     { href: t("/settings/notifications"), label: "Benachrichtigungen", icon: "settings" },
   ] : [];

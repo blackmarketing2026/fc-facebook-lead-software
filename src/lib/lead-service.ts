@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
+import { getSubjectKeywords, subjectMatches } from "./lead-intake";
 import { parseLeadText } from "./lead-parser";
 import { sendAssigneeLeadMail, sendLeadNotificationMail, sendMasterLeadMail } from "./lead-notify-mail";
 import { sendPushToUser } from "./push";
@@ -31,7 +32,7 @@ async function platformTenantId(): Promise<string> {
  * Verarbeitet eine eingehende Mail: speichert sie, parst den Lead, legt ihn an,
  * verteilt ihn per Round-Robin und benachrichtigt den Vertriebler.
  */
-export async function processInboundMail(mail: InboundMail): Promise<ProcessResult> {
+export async function processInboundMail(mail: InboundMail, options: { skipSubjectFilter?: boolean } = {}): Promise<ProcessResult> {
   const existing = await db.inboundEmail.findUnique({ where: { messageId: mail.messageId } });
   if (existing) return { status: "DUPLICATE" };
 
@@ -47,6 +48,12 @@ export async function processInboundMail(mail: InboundMail): Promise<ProcessResu
     receivedAt: mail.receivedAt,
     rawText,
   };
+
+  if (parsed.ok && !options.skipSubjectFilter && !subjectMatches(mail.subject, await getSubjectKeywords())) {
+    const error = "Der Betreff enthält keines der eingestellten Stichwörter (Einstellungen → Lead-Eingang).";
+    const inbound = await db.inboundEmail.create({ data: { ...inboundData, status: "IGNORED", error } });
+    return { status: "IGNORED", error, inboundId: inbound.id };
+  }
 
   if (!parsed.ok) {
     // Jede Mail wird geprüft; Mails ohne Lead-JSON werden nur protokolliert.

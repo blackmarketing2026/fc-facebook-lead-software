@@ -1,8 +1,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { db } from "./db";
+import { decryptSecret } from "./secret-box";
 import { isRestrictedUser, isTenantLocked } from "./access-lock";
-
-let transporter: Transporter | null | undefined;
 
 function configured(value: string | undefined): value is string {
   return Boolean(value) && !value!.startsWith("PLATZHALTER");
@@ -10,47 +9,76 @@ function configured(value: string | undefined): value is string {
 
 /** Beim Einfügen in Vercel mitkopierte Leerzeichen und Anführungszeichen entfernen. */
 function clean(value: string | undefined): string | undefined {
-  return value?.trim().replace(/^(["'])(.*)\1$/, "$2");
+  return value?.trim().replace(/^(["'])(.*)$/, "$2");
 }
 
-/** SMTP-Zugang für den Versand – ausschließlich aus den SMTP_*-Variablen. */
-function smtpConfig() {
+/** Setting-Schlüssel der in der App gespeicherten SMTP-Einstellungen (Passwort verschlüsselt). */
+export const SMTP_SETTING_KEY = "smtp.config";
+
+export type StoredSmtp = { host: string; port: number; secure: boolean; user: string; from: string; pass?: string };
+
+export async function readStoredSmtp(): Promise<StoredSmtp | null> {
+  const row = await db.setting.findUnique({ where: { key: SMTP_SETTING_KEY } });
+  if (!row) return null;
+  try {
+    return JSON.parse(row.value) as StoredSmtp;
+  } catch {
+    return null;
+  }
+}
+
+export type SmtpConfig = { host?: string; port: number; secure: boolean; user?: string; pass?: string; from?: string; source: "app" | "env" };
+
+/** Wirksamer SMTP-Zugang: in der App gespeicherte Werte gehen vor den SMTP_*-Variablen des Servers. */
+export async function smtpConfig(): Promise<SmtpConfig> {
+  const stored = await readStoredSmtp();
+  if (stored?.host) {
+    const pass = stored.pass ? decryptSecret(stored.pass) ?? undefined : undefined;
+    return { host: stored.host, port: stored.port, secure: stored.secure, user: stored.user || undefined, pass, from: stored.from || stored.user || undefined, source: "app" };
+  }
   const env = process.env;
   const user = clean(env.SMTP_USER);
   const from = configured(env.SMTP_FROM) ? clean(env.SMTP_FROM) : user;
-  return { host: clean(env.SMTP_HOST), user, pass: clean(env.SMTP_PASS), from };
+  return { host: clean(env.SMTP_HOST), port: Number(env.SMTP_PORT || 465), secure: env.SMTP_SECURE !== "false", user, pass: clean(env.SMTP_PASS), from, source: "env" };
 }
 
-/** Pflicht-Variablen, die auf dem Server fehlen (für Hinweise in den Einstellungen). */
-export function missingMailerVars(): string[] {
-  return (["SMTP_HOST", "SMTP_USER", "SMTP_PASS"] as const).filter((key) => !configured(process.env[key]));
+/** Pflichtangaben, die für den Versand noch fehlen (für Hinweise in den Einstellungen). */
+export async function missingMailerVars(): Promise<string[]> {
+  const c = await smtpConfig();
+  return [["Server", c.host], ["Benutzer", c.user], ["Passwort", c.pass]].filter(([, v]) => !configured(v)).map(([k]) => k as string);
 }
 
 /** Server und Benutzer (ohne Passwort) – für Fehlermeldungen beim Test-Versand. */
-export function mailerInfo(): string {
-  const { host, user } = smtpConfig();
-  return `SMTP_HOST ${host ?? "–"}, SMTP_USER ${user ?? "–"}`;
+export async function mailerInfo(): Promise<string> {
+  const { host, port, user } = await smtpConfig();
+  return `${host ?? "–"}:${port}, Benutzer ${user ?? "–"}`;
 }
 
-export function mailerConfigured(): boolean {
-  return missingMailerVars().length === 0;
+export async function mailerConfigured(): Promise<boolean> {
+  return (await missingMailerVars()).length === 0;
 }
 
-function getTransporter(): Transporter | null {
-  if (transporter !== undefined) return transporter;
-  if (!mailerConfigured()) {
+function createTransporter(c: SmtpConfig): Transporter {
+  return nodemailer.createTransport({
+    host: c.host,
+    port: c.port,
+    secure: c.secure,
+    auth: configured(c.user) ? { user: c.user, pass: c.pass ?? "" } : undefined,
+  });
+}
+
+async function getTransporter(): Promise<{ t: Transporter; from?: string } | null> {
+  const c = await smtpConfig();
+  if (!configured(c.host) || !configured(c.user) || !configured(c.pass)) {
     console.warn("[mail] SMTP ist nicht eingerichtet – E-Mail-Benachrichtigungen sind deaktiviert");
-    transporter = null;
     return null;
   }
-  const { host, user, pass } = smtpConfig();
-  transporter = nodemailer.createTransport({
-    host,
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: process.env.SMTP_SECURE !== "false",
-    auth: configured(user) ? { user, pass: pass ?? "" } : undefined,
-  });
-  return transporter;
+  return { t: createTransporter(c), from: c.from };
+}
+
+/** Prüft Zugangsdaten per SMTP-Verbindung und Anmeldung, ohne eine Mail zu senden. */
+export async function verifySmtp(c: SmtpConfig): Promise<void> {
+  await createTransporter(c).verify();
 }
 
 export type Mail = {
@@ -63,8 +91,8 @@ export type Mail = {
 
 /** Verschickt eine Mail über SMTP. Gibt false zurück, wenn SMTP nicht eingerichtet ist. */
 export async function sendMail(mail: Mail): Promise<boolean> {
-  const t = getTransporter();
-  if (!t || mail.to.length === 0) return false;
+  const tr = await getTransporter();
+  if (!tr || mail.to.length === 0) return false;
   const members = await db.user.findMany({
     where: { email: { in: mail.to } },
     select: { email: true, username: true, displayName: true, active: true, isPlatformAdmin: true,
@@ -75,7 +103,7 @@ export async function sendMail(mail: Mail): Promise<boolean> {
     .map((m) => m.email.toLowerCase()));
   const to = mail.to.filter((address) => !blockedEmails.has(address.toLowerCase()));
   if (to.length === 0) return false;
-  await t.sendMail({ from: smtpConfig().from, ...mail, to });
+  await tr.t.sendMail({ from: tr.from, ...mail, to });
   return true;
 }
 

@@ -111,7 +111,7 @@ export async function createReminder(leadId: string, _prev: FormState, formData:
   refreshLead();
 
   // Bei jedem neuen Termin bekommt der zuständige Vertriebler eine Mail mit Kalender-Button.
-  if (!mailerConfigured()) return { ok: true, message: "Gespeichert. (Mailversand ist auf dem Server nicht eingerichtet.)" };
+  if (!(await mailerConfigured())) return { ok: true, message: "Gespeichert. (Mailversand ist auf dem Server nicht eingerichtet.)" };
   try {
     const sentTo = await sendReminderMail(reminder.id, user.displayName);
     return { ok: true, message: sentTo ? `Gespeichert – E-Mail mit Kalendereintrag an ${sentTo} verschickt.` : "Gespeichert." };
