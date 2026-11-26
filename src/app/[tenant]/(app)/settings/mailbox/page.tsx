@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
+import { imapSettings } from "@/lib/imap-settings";
 import { formatDateTime } from "@/lib/format";
 import { tenantPath } from "@/lib/tenant-paths";
 import { requireAdmin } from "@/lib/session";
@@ -25,7 +26,8 @@ export default async function MailboxPage() {
   ]);
   const lastRun: LastRun | null = lastRunSetting ? JSON.parse(lastRunSetting.value) : null;
   const count = (s: string) => counts.find((c) => c.status === s)?._count ?? 0;
-  const imapUser = process.env.IMAP_USER;
+  const imap = await imapSettings();
+  const imapUser = imap.user;
 
   return (
     <div className="space-y-6">

@@ -1,5 +1,6 @@
 import { checkReminders } from "./reminders";
-import { imapConfigured, pollMailbox } from "../lib/mailbox";
+import { imapConfigured } from "../lib/imap-settings";
+import { pollMailbox } from "../lib/mailbox";
 
 const IMAP_INTERVAL = Number(process.env.IMAP_POLL_SECONDS || 60) * 1000;
 const REMINDER_INTERVAL = 60 * 1000;
@@ -23,6 +24,6 @@ function every(name: string, ms: number, task: () => Promise<unknown>) {
 }
 
 console.log("[worker] gestartet");
-if (!imapConfigured()) console.warn("[worker] IMAP-Zugang fehlt (Platzhalter) – Postfach-Abruf läuft im Leerlauf");
+void imapConfigured().then((ok) => ok || console.warn("[worker] IMAP-Zugang fehlt (Platzhalter) – Postfach-Abruf läuft im Leerlauf"));
 every("imap", IMAP_INTERVAL, pollMailbox);
 every("reminders", REMINDER_INTERVAL, checkReminders);

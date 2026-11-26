@@ -1,30 +1,44 @@
-import { getSubjectKeywords } from "@/lib/lead-intake";
+import { imapSettings, readStoredImap } from "@/lib/imap-settings";
+import { getRecipientKeywords, getSubjectKeywords } from "@/lib/lead-intake";
 import { requireAdmin } from "@/lib/session";
-import { IntakeForm } from "./intake-form";
+import { ImapForm, IntakeRulesForm } from "./intake-form";
 
-export const metadata = { title: "Lead-Eingang" };
+export const metadata = { title: "Lead-Empfang" };
 
 export default async function IntakePage() {
   await requireAdmin();
-  const keywords = await getSubjectKeywords();
+  const [subject, recipient, imap, stored] = await Promise.all([getSubjectKeywords(), getRecipientKeywords(), imapSettings(), readStoredImap()]);
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Lead-Eingang</h1>
+        <h1 className="text-2xl font-semibold">Lead-Empfang</h1>
         <p className="text-sm text-slate-500">
-          Hier legst du fest, woran das System neue Leads erkennt. Aktuell kommen Leads über einen Kanal: das Lead-Postfach
-          (E-Mail mit dem Formular-JSON von Facebook).
+          So kommen Leads ins System: Das System ruft das Postfach unten regelmäßig ab. Jede Mail, die die Bedingungen
+          erfüllt und ein gültiges Lead-JSON enthält, wird als Lead importiert und danach aus dem Postfach gelöscht. Alle
+          anderen Mails bleiben liegen (als gelesen markiert) und stehen im Bereich Postfach als „Kein Lead“.
         </p>
       </div>
+
       <section className="card p-5">
-        <h2 className="mb-1 font-semibold">Betreff der Lead-Mail</h2>
+        <h2 className="mb-1 font-semibold">1. Postfach</h2>
         <p className="mb-3 text-sm text-slate-500">
-          Eine Mail wird nur dann als Lead angelegt, wenn ihr Betreff mindestens eines dieser Stichwörter enthält
-          (Groß-/Kleinschreibung egal). Ein Stichwort pro Zeile oder mit Komma getrennt. Leer lassen, um jede Mail mit
-          gültigem Lead-JSON anzunehmen. Mails ohne passendes Stichwort erscheinen im Postfach als „Kein Lead“ und können
-          dort bei Bedarf trotzdem nachverarbeitet werden.
+          An dieses Postfach (IMAP) müssen die Lead-Mails geschickt werden. Du kannst dasselbe Postfach wie für den
+          E-Mail-Versand (SMTP) verwenden.
         </p>
-        <IntakeForm initial={keywords.join("\n")} />
+        <ImapForm
+          initial={{ host: imap.host ?? "", port: imap.port, secure: imap.secure, user: imap.user ?? "", hasPassword: Boolean(imap.pass) }}
+          source={imap.source}
+          hasStored={Boolean(stored)}
+        />
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">2. Bedingungen für den Import</h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Beide Bedingungen müssen erfüllt sein. Pro Bedingung genügt ein passendes Stichwort (eines pro Zeile oder mit
+          Komma getrennt, Groß-/Kleinschreibung egal). Leer = keine Einschränkung.
+        </p>
+        <IntakeRulesForm subject={subject.join("\n")} recipient={recipient.join("\n")} />
       </section>
     </div>
   );

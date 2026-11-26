@@ -52,7 +52,7 @@ vi.mock("mailparser", () => ({
 vi.mock("@/lib/db", () => ({
   db: {
     inboundEmail: { findUnique: async ({ where }: { where: { messageId: string } }) => state.stored.get(where.messageId) ?? null },
-    setting: { upsert: state.status },
+    setting: { upsert: state.status, findUnique: async () => null },
   },
 }));
 

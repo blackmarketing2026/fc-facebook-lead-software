@@ -1,6 +1,7 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser, type AddressObject, type ParsedMail } from "mailparser";
 import { db } from "./db";
+import { imapConfigured, imapSettings } from "./imap-settings";
 import { processInboundMail } from "./lead-service";
 
 const SEEN_FLAG = String.raw`\Seen`;
@@ -17,11 +18,6 @@ function imapErrorMessage(error: unknown): string {
     return "IMAP-Anmeldung fehlgeschlagen. Benutzername und Passwort des Postfachs prüfen.";
   }
   return error instanceof Error ? error.message : "Unbekannter IMAP-Fehler";
-}
-
-export function imapConfigured(): boolean {
-  const { IMAP_HOST, IMAP_USER, IMAP_PASS } = process.env;
-  return Boolean(IMAP_HOST && IMAP_USER && IMAP_PASS && !IMAP_HOST.startsWith("PLATZHALTER"));
 }
 
 function addressText(value: AddressObject | AddressObject[] | undefined): string[] {
@@ -52,17 +48,18 @@ async function setStatus(value: string) {
 
 /** Ruft neue Mails ab; reconcile gleicht auch gelesene Mails und den alten Ordner ab. */
 export async function pollMailbox(reconcile = false): Promise<PollResult> {
-  if (!imapConfigured()) {
-    const message = "IMAP nicht konfiguriert (Platzhalter in .env)";
+  if (!(await imapConfigured())) {
+    const message = "IMAP nicht konfiguriert (Einstellungen → Lead-Empfang)";
     await setStatus(JSON.stringify({ at: new Date().toISOString(), ok: false, message }));
     return { ok: false, message };
   }
 
+  const cfg = await imapSettings();
   const client = new ImapFlow({
-    host: process.env.IMAP_HOST!,
-    port: Number(process.env.IMAP_PORT || 993),
-    secure: process.env.IMAP_SECURE !== "false",
-    auth: { user: process.env.IMAP_USER!, pass: process.env.IMAP_PASS! },
+    host: cfg.host!,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: { user: cfg.user!, pass: cfg.pass! },
     logger: false,
   });
 

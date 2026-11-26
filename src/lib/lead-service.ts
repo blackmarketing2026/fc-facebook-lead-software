@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
-import { getSubjectKeywords, subjectMatches } from "./lead-intake";
+import { intakeRejection } from "./lead-intake";
 import { parseLeadText } from "./lead-parser";
 import { sendAssigneeLeadMail, sendLeadNotificationMail, sendMasterLeadMail } from "./lead-notify-mail";
 import { sendPushToUser } from "./push";
@@ -49,8 +49,9 @@ export async function processInboundMail(mail: InboundMail, options: { skipSubje
     rawText,
   };
 
-  if (parsed.ok && !options.skipSubjectFilter && !subjectMatches(mail.subject, await getSubjectKeywords())) {
-    const error = "Der Betreff enthält keines der eingestellten Stichwörter (Einstellungen → Lead-Eingang).";
+  const rejection = parsed.ok && !options.skipSubjectFilter ? await intakeRejection(mail) : null;
+  if (rejection) {
+    const error = rejection;
     const inbound = await db.inboundEmail.create({ data: { ...inboundData, status: "IGNORED", error } });
     return { status: "IGNORED", error, inboundId: inbound.id };
   }

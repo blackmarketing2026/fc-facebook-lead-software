@@ -5,7 +5,9 @@ import { z } from "zod";
 import { tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
 import { buildLeadMail } from "@/lib/lead-notify-mail";
-import { parseKeywords, SUBJECT_KEYWORDS_KEY } from "@/lib/lead-intake";
+import { ImapFlow } from "imapflow";
+import { imapSettings, IMAP_SETTING_KEY, readStoredImap, type StoredImap } from "@/lib/imap-settings";
+import { parseKeywords, RECIPIENT_KEYWORDS_KEY, SUBJECT_KEYWORDS_KEY } from "@/lib/lead-intake";
 import { processInboundMail, reprocessInbound } from "@/lib/lead-service";
 import { encryptSecret } from "@/lib/secret-box";
 import { mailerConfigured, mailerInfo, missingMailerVars, parseEmailList, readStoredSmtp, sendMail, smtpConfig, SMTP_SETTING_KEY, verifySmtp, type StoredSmtp } from "@/lib/mailer";
@@ -90,19 +92,6 @@ export async function sendTestLeadMail(): Promise<SettingsState> {
   return { ok: `Test-Mail an ${to.join(", ")} verschickt.` };
 }
 
-/** Speichert die Betreff-Stichwörter, an denen eine Lead-Mail erkannt wird. */
-export async function saveSubjectKeywords(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
-  await requireAdmin();
-  const keywords = parseKeywords(String(formData.get("keywords") ?? ""));
-  if (keywords.length > 20) return { error: "Höchstens 20 Stichwörter." };
-  if (keywords.some((k) => k.length > 100)) return { error: "Ein Stichwort ist zu lang (max. 100 Zeichen)." };
-  const value = keywords.join("\n");
-  if (value) await db.setting.upsert({ where: { key: SUBJECT_KEYWORDS_KEY }, update: { value }, create: { key: SUBJECT_KEYWORDS_KEY, value } });
-  else await db.setting.deleteMany({ where: { key: SUBJECT_KEYWORDS_KEY } });
-  revalidatePath("/[tenant]/settings/intake", "page");
-  return { ok: value ? `Gespeichert – ${keywords.length} Stichwort${keywords.length === 1 ? "" : "wörter"}.` : "Gespeichert – jede Mail mit Lead-JSON wird angenommen." };
-}
-
 const smtpSchema = z.object({
   host: z.string().trim().min(1, "Server fehlt").max(200),
   port: z.coerce.number().int().min(1, "Ungültiger Port").max(65535, "Ungültiger Port"),
@@ -159,4 +148,104 @@ export async function testSmtp(_prev: SettingsState, formData: FormData): Promis
     return { error: `Versand fehlgeschlagen: ${(err as Error).message}` };
   }
   return { ok: `Verbindung OK, Test-Mail an ${to} verschickt.` };
+}
+
+async function saveKeywordSetting(key: string, keywords: string[]) {
+  const value = keywords.join("\n");
+  if (value) await db.setting.upsert({ where: { key }, update: { value }, create: { key, value } });
+  else await db.setting.deleteMany({ where: { key } });
+}
+
+/** Speichert die Bedingungen, unter denen eine Mail aus dem Postfach als Lead importiert wird. */
+export async function saveIntakeRules(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
+  await requireAdmin();
+  const subject = parseKeywords(String(formData.get("subject") ?? ""));
+  const recipient = parseKeywords(String(formData.get("recipient") ?? ""));
+  for (const list of [subject, recipient]) {
+    if (list.length > 20) return { error: "Höchstens 20 Einträge pro Bedingung." };
+    if (list.some((k) => k.length > 100)) return { error: "Ein Eintrag ist zu lang (max. 100 Zeichen)." };
+  }
+  await saveKeywordSetting(SUBJECT_KEYWORDS_KEY, subject);
+  await saveKeywordSetting(RECIPIENT_KEYWORDS_KEY, recipient);
+  revalidatePath("/[tenant]/settings/intake", "page");
+  const quote = (list: string[]) => list.map((k) => `„${k}“`).join(" oder ");
+  const parts = [
+    subject.length ? `Betreff enthält ${quote(subject)}` : "Betreff beliebig",
+    recipient.length ? `Empfänger enthält ${quote(recipient)}` : "Empfänger beliebig",
+  ];
+  return { ok: `Gespeichert: ${parts.join(" · ")}.` };
+}
+
+const imapSchema = z.object({
+  host: z.string().trim().min(1, "Server fehlt").max(200),
+  port: z.coerce.number().int().min(1, "Ungültiger Port").max(65535, "Ungültiger Port"),
+  user: z.string().trim().min(1, "Benutzer fehlt").max(200),
+});
+
+async function writeImap(value: StoredImap) {
+  const json = JSON.stringify(value);
+  await db.setting.upsert({ where: { key: IMAP_SETTING_KEY }, update: { value: json }, create: { key: IMAP_SETTING_KEY, value: json } });
+  revalidatePath("/[tenant]/settings", "layout");
+}
+
+/** Speichert das Lead-Postfach (IMAP) in der App; Passwort verschlüsselt, leeres Feld behält das bisherige. */
+export async function saveImapSettings(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
+  await requireAdmin();
+  const parsed = imapSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: firstError(parsed.error) };
+  const password = String(formData.get("password") ?? "");
+  const stored = await readStoredImap();
+  const current = await imapSettings();
+  let pass = stored?.pass;
+  if (password) pass = encryptSecret(password);
+  else if (!pass && current.pass) pass = encryptSecret(current.pass);
+  if (!pass) return { error: "Bitte das Passwort eingeben." };
+  await writeImap({ ...parsed.data, secure: formData.get("secure") === "on", pass });
+  return { ok: "Postfach gespeichert." };
+}
+
+/** Übernimmt Benutzer und Passwort vom SMTP-Zugang (gleiches Postfach für Empfang und Versand). */
+export async function copyImapFromSmtp(): Promise<SettingsState> {
+  await requireAdmin();
+  const smtp = await smtpConfig();
+  if (!smtp.user || !smtp.pass || !smtp.host) return { error: "Der SMTP-Zugang ist noch nicht vollständig eingerichtet." };
+  const current = await imapSettings();
+  const value: StoredImap = {
+    host: current.host && current.source === "app" ? current.host : smtp.host,
+    port: current.port,
+    secure: current.secure,
+    user: smtp.user,
+    pass: encryptSecret(smtp.pass),
+  };
+  await writeImap(value);
+  return { ok: `Übernommen: ${value.user} @ ${value.host}:${value.port}. Bitte jetzt testen.` };
+}
+
+export async function resetImapSettings(): Promise<SettingsState> {
+  await requireAdmin();
+  await db.setting.deleteMany({ where: { key: IMAP_SETTING_KEY } });
+  revalidatePath("/[tenant]/settings", "layout");
+  return { ok: "Gespeicherte Werte gelöscht – es gelten wieder die Server-Variablen." };
+}
+
+/** Meldet sich am Postfach an und zeigt, wie viele Mails im Posteingang liegen. */
+export async function testImap(): Promise<SettingsState> {
+  await requireAdmin();
+  const c = await imapSettings();
+  if (!c.host || !c.user || !c.pass) return { error: "Das Postfach ist noch nicht vollständig eingerichtet." };
+  const client = new ImapFlow({ host: c.host, port: c.port, secure: c.secure, auth: { user: c.user, pass: c.pass }, logger: false });
+  try {
+    await client.connect();
+    const status = await client.status("INBOX", { messages: true, unseen: true });
+    const uidplus = client.capabilities.has("UIDPLUS");
+    await client.logout();
+    return uidplus
+      ? { ok: `Anmeldung OK – Posteingang: ${status ? status.messages : "?"} Mail(s), davon ${status ? status.unseen : "?"} ungelesen.` }
+      : { error: "Anmeldung OK, aber der Server unterstützt kein gezieltes Löschen (UIDPLUS) – der Import würde nicht laufen." };
+  } catch (err) {
+    client.close();
+    const response = (err as { response?: unknown })?.response;
+    const auth = typeof response === "string" && /AUTHENTICATIONFAILED|authentication failed/i.test(response);
+    return { error: auth ? "Anmeldung fehlgeschlagen – Benutzer oder Passwort prüfen." : `Verbindung fehlgeschlagen: ${(err as Error).message}` };
+  }
 }
