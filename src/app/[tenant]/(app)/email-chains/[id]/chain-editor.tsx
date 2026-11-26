@@ -260,45 +260,76 @@ function EmailCard({ step, index, total, testEmail, onMove, onRemove, submit, st
   );
 }
 
+const UNTIL_OPTIONS: { days: number; label: string }[] = [
+  { days: 0, label: "heute (ist die Uhrzeit vorbei: morgen)" },
+  { days: 1, label: "morgen" },
+  { days: 2, label: "übermorgen" },
+  { days: 3, label: "in 3 Tagen" },
+  { days: 5, label: "in 5 Tagen" },
+  { days: 7, label: "in 7 Tagen" },
+  { days: 14, label: "in 14 Tagen" },
+  { days: 30, label: "in 30 Tagen" },
+];
+
 function WaitCard({ step, index, total, onMove, onRemove, submit, state, disabled, pending }: CardProps & { submit: (e: React.FormEvent<HTMLFormElement>) => void; state: ChainState; disabled: boolean; pending: boolean }) {
-  const [unit, setUnit] = useState(step.waitUnit);
-  const [useTime, setUseTime] = useState(Boolean(step.waitTime));
-  const timeAllowed = unit === "DAYS";
+  const [mode, setMode] = useState<"duration" | "until">(step.waitTime ? "until" : "duration");
+  const [unit, setUnit] = useState<StepData["waitUnit"]>(step.waitUnit);
+  const [days, setDays] = useState(step.waitTime ? step.waitValue : 1);
+  const untilOptions = UNTIL_OPTIONS.some((o) => o.days === days) ? UNTIL_OPTIONS : [...UNTIL_OPTIONS, { days, label: `in ${days} Tagen` }].sort((x, y) => x.days - y.days);
+  const radio = "flex items-center gap-2 text-sm text-amber-900";
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-semibold text-amber-900">⏱ Wartezeit {step.saving && <span className="font-normal text-amber-700">· wird angelegt …</span>}</span>
         <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} />
       </div>
-      <form onSubmit={submit} className="mt-2 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-amber-900">Warte</span>
-          <input name="waitValue" type="number" min={useTime && timeAllowed ? 0 : 1} defaultValue={step.waitValue} className="input !w-24" aria-label="Dauer" />
-          <select name="waitUnit" value={unit} onChange={(e) => setUnit(e.target.value as StepData["waitUnit"])} className="input !w-auto" aria-label="Einheit">
-            {Object.entries(UNITS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
+      <form onSubmit={submit} className="mt-2 space-y-3">
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          <label className={radio}>
+            <input type="radio" name="waitMode" checked={mode === "duration"} onChange={() => setMode("duration")} className="h-4 w-4" />
+            ⏳ Eine Dauer abwarten
+          </label>
+          <label className={radio}>
+            <input type="radio" name="waitMode" checked={mode === "until"} onChange={() => setMode("until")} className="h-4 w-4" />
+            🕗 Bis zu einer Uhrzeit warten
+          </label>
         </div>
-        {timeAllowed && (
+
+        {mode === "duration" ? (
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-sm text-amber-900">
-              <input type="checkbox" name="useTime" checked={useTime} onChange={(e) => setUseTime(e.target.checked)} className="h-4 w-4" />
-              dann zu fester Uhrzeit
-            </label>
-            {useTime && (
-              <>
-                <input name="waitTime" type="time" defaultValue={step.waitTime || "08:00"} required className="input !w-32" aria-label="Uhrzeit" />
-                <span className="text-sm text-amber-900">Uhr</span>
-              </>
-            )}
+            <span className="text-sm text-amber-900">Warte</span>
+            <input name="waitValue" type="number" min={1} defaultValue={step.waitTime ? 1 : step.waitValue} className="input !w-24" aria-label="Dauer" />
+            <select name="waitUnit" value={unit} onChange={(e) => setUnit(e.target.value as StepData["waitUnit"])} className="input !w-auto" aria-label="Einheit">
+              {Object.entries(UNITS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-amber-900">Warte bis</span>
+              <select name="waitValue" value={days} onChange={(e) => setDays(Number(e.target.value))} className="input !w-auto" aria-label="Tag">
+                {untilOptions.map((o) => (
+                  <option key={o.days} value={o.days}>{o.label}</option>
+                ))}
+              </select>
+              <span className="text-sm text-amber-900">um</span>
+              <input name="waitTime" type="time" defaultValue={step.waitTime || "08:00"} required className="input !w-32" aria-label="Uhrzeit" />
+              <span className="text-sm text-amber-900">Uhr</span>
+            </div>
+            <input type="hidden" name="waitUnit" value="DAYS" />
+            <input type="hidden" name="useTime" value="on" />
+            <p className="text-xs text-amber-800">
+              {days === 0
+                ? "Danach geht es weiter: heute zur gewählten Uhrzeit, ist sie schon vorbei, morgen."
+                : days === 1
+                  ? "Danach geht es weiter: am nächsten Kalendertag zur gewählten Uhrzeit – auch wenn die vorherige Mail um 8:01 Uhr rausging, kommt die nächste schon morgen um 8:00 Uhr."
+                  : `Danach geht es weiter: in ${days} Kalendertagen zur gewählten Uhrzeit (deutsche Zeit).`}
+            </p>
           </div>
         )}
-        {useTime && timeAllowed && (
-          <p className="text-xs text-amber-800">
-            Gezählt wird in Kalendertagen: {Number(step.waitValue) === 0 ? "Die nächste E-Mail geht heute zur gewählten Uhrzeit raus (ist sie schon vorbei, morgen)." : "Eine E-Mail, die z. B. um 8:01 Uhr rausgeht, bekommt bei „1 Tag, 08:00 Uhr“ die nächste am Folgetag um 8:00 Uhr (nicht erst übermorgen)."}
-          </p>
-        )}
+
         <div className="flex flex-wrap items-center gap-2">
           <button disabled={disabled} className="btn-secondary !py-1.5 text-sm">{pending ? "…" : "Speichern"}</button>
           <Status state={state} />
