@@ -22,6 +22,7 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
     ...(user.role === "ADMIN" ? [{ href: t("/email-chains"), label: "E-Mail-Ketten", icon: "mail" }] : []),
   ];
   const secondary: AppLink[] = user.role === "ADMIN" ? [
+    { href: t("/import"), label: "Kontakte importieren", icon: "users" },
     { href: t("/emails"), label: "E-Mails", icon: "mail" },
     { href: t("/settings/intake"), label: "Lead-Empfang", icon: "sliders" },
     { href: t("/settings/smtp"), label: "SMTP", icon: "mail" },

@@ -25,6 +25,7 @@ export function activityText(type: ActivityType, meta: unknown, users: Map<strin
     case "EMAIL_COMPLAINT":
       return `Hat die E-Mail${m.subject ? ` „${m.subject as string}“` : ""} als Spam gemeldet – automatisch abgemeldet`;
     case "UNSUBSCRIBED":
+      if (m.via === "import") return "Ohne E-Mail-Einwilligung angelegt – kein E-Mail-Versand";
       return m.via === "link" ? "Hat sich über den Abmelde-Link abgemeldet" : "Vom E-Mail-Verteiler abgemeldet";
     default:
       return ACTIVITY_LABELS[type];
