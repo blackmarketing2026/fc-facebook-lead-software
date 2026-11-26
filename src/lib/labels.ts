@@ -10,4 +10,9 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   NOTE_ADDED: "Notiz hinzugefügt",
   REMINDER_SET: "Termin geplant",
   REMINDER_DONE: "Termin erledigt",
+  TAG_ADDED: "Tag vergeben",
+  TAG_REMOVED: "Tag entfernt",
+  EMAIL_SENT: "E-Mail verschickt",
+  UNSUBSCRIBED: "Vom E-Mail-Verteiler abgemeldet",
+  RESUBSCRIBED: "Wieder für E-Mails freigegeben",
 };

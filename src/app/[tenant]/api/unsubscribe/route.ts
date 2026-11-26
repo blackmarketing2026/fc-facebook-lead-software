@@ -25,7 +25,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const { leadId, token } = params(request);
   if (!leadId || !verifyUnsubscribe(leadId, token)) return page("Link ungültig", "<p>Dieser Abmelde-Link ist ungültig.</p>", 400);
-  await db.lead.updateMany({ where: { id: leadId }, data: { emailOptOut: true } });
+  const changed = await db.lead.updateMany({ where: { id: leadId, emailOptOut: false }, data: { emailOptOut: true, emailOptOutAt: new Date() } });
+  if (changed.count) await db.activity.create({ data: { leadId, type: "UNSUBSCRIBED", meta: { via: "link" } } });
   await db.chainRun.updateMany({ where: { leadId, status: "ACTIVE" }, data: { status: "CANCELLED", nextRunAt: null, finishedAt: new Date() } });
   return page("Du wurdest abgemeldet", `<p style="color:#475569">Du bekommst keine weiteren E-Mails mehr von uns.</p>`);
 }

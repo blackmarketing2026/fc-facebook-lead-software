@@ -1,10 +1,9 @@
-import type { ActivityType, ReminderType } from "@prisma/client";
 import Link from "next/link";
 import { ResetLeadButton } from "@/components/reset-lead-button";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime, telHref, TIMEZONE, whatsappNumber } from "@/lib/format";
-import { ACTIVITY_LABELS } from "@/lib/labels";
+import { activityText } from "@/lib/activity-text";
 import { googleCalendarUrl } from "@/lib/ics";
 import { isContactKey } from "@/lib/lead-parser";
 import { reminderEvent } from "@/lib/reminder-calendar";
@@ -27,22 +26,6 @@ function defaultDueValue(): string {
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const day = new Intl.DateTimeFormat("sv-SE", { timeZone: TIMEZONE }).format(tomorrow); // YYYY-MM-DD
   return `${day}T10:00`;
-}
-
-function activityText(type: ActivityType, meta: unknown, users: Map<string, string>): string {
-  const m = (meta ?? {}) as Record<string, unknown>;
-  switch (type) {
-    case "STATUS_CHANGED": {
-      return `Phase: ${(m.fromStage as string) ?? "–"} → ${(m.toStage as string) ?? "–"}`;
-    }
-    case "ASSIGNED":
-      if (m.pool) return "Zurück in den freien Pool gegeben";
-      return `Zugewiesen an ${users.get(m.toUserId as string) ?? "?"}${m.auto ? " (automatisch)" : ""}${m.test ? " – Verteilungstest" : ""}`;
-    case "REMINDER_SET":
-      return `${m.type ? reminderLabel(m.type as ReminderType) : "Rückruf"} geplant für ${m.dueAt ? formatDateTime(new Date(m.dueAt as string)) : "?"}`;
-    default:
-      return ACTIVITY_LABELS[type];
-  }
 }
 
 export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[id]">) {

@@ -32,9 +32,11 @@ export async function ensureTag(tenantId: string, name: string) {
  * Gibt dem Lead den Tag und startet alle aktiven Ketten, die mit diesem Tag beginnen.
  * Jeder Lead durchläuft eine Kette nur einmal. Bereits getaggte Leads werden beim späteren Aktivieren einer Kette nicht nachträglich gestartet.
  */
-export async function addTagToLead(leadId: string, tagId: string): Promise<{ added: boolean; started: number }> {
+export async function addTagToLead(leadId: string, tag: { id: string; name: string }, userId?: string): Promise<{ added: boolean; started: number }> {
+  const tagId = tag.id;
   const created = await db.leadTag.createMany({ data: [{ leadId, tagId }], skipDuplicates: true });
   if (created.count === 0) return { added: false, started: 0 };
+  await db.activity.create({ data: { leadId, userId: userId ?? null, type: "TAG_ADDED", meta: { tag: tag.name } } });
   const chains = await db.emailChain.findMany({ where: { triggerTagId: tagId, active: true }, select: { id: true } });
   let started = 0;
   for (const chain of chains) {
@@ -53,7 +55,7 @@ export async function autoTagNewLead(tenantId: string, leadId: string): Promise<
   const name = cleanTagName(await getAutoTagName());
   if (!name) return;
   const tag = await ensureTag(tenantId, name);
-  await addTagToLead(leadId, tag.id);
+  await addTagToLead(leadId, tag);
 }
 
 export function unsubscribeUrl(slug: string, leadId: string): string {
@@ -106,7 +108,7 @@ export async function processChains(now = new Date()): Promise<ProcessSummary> {
     const run = await db.chainRun.findUniqueOrThrow({
       where: { id: candidate.id },
       include: {
-        chain: { select: { id: true, tenant: { select: { slug: true } }, steps: { orderBy: { position: "asc" } } } },
+        chain: { select: { id: true, name: true, tenant: { select: { slug: true } }, steps: { orderBy: { position: "asc" } } } },
         lead: { select: { id: true, fullName: true, email: true, emailOptOut: true } },
       },
     });
@@ -158,6 +160,7 @@ export async function processChains(now = new Date()): Promise<ProcessSummary> {
         const sent = await sendMail({ to: [run.lead.email], ...mail });
         if (sent) {
           await log("SENT", mail.subject);
+          await db.activity.create({ data: { leadId: run.lead.id, type: "EMAIL_SENT", meta: { subject: mail.subject, chain: run.chain.name } } }).catch(() => undefined);
           summary.sent++;
         } else {
           await log("FAILED", mail.subject, "SMTP ist nicht eingerichtet oder der Empfänger ist gesperrt.");

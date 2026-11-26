@@ -170,7 +170,7 @@ export async function addLeadTag(leadId: string, name: string): Promise<ChainSta
   const clean = cleanTagName(name);
   if (!clean) return { error: "Bitte einen Tag eingeben." };
   const tag = await ensureTag(user.tenantId, clean);
-  const res = await addTagToLead(leadId, tag.id);
+  const res = await addTagToLead(leadId, tag, user.id);
   revalidatePath("/[tenant]/leads/[id]", "page");
   refresh();
   if (!res.added) return { error: "Der Lead hat diesen Tag schon." };
@@ -180,7 +180,9 @@ export async function addLeadTag(leadId: string, name: string): Promise<ChainSta
 export async function removeLeadTag(leadId: string, tagId: string): Promise<ChainState> {
   const user = await requireUser();
   await getAccessibleLeadOr404(user, leadId);
-  await db.leadTag.deleteMany({ where: { leadId, tagId, tag: { tenantId: user.tenantId } } });
+  const tag = await db.tag.findFirst({ where: { id: tagId, tenantId: user.tenantId }, select: { name: true } });
+  const removed = await db.leadTag.deleteMany({ where: { leadId, tagId, tag: { tenantId: user.tenantId } } });
+  if (removed.count && tag) await db.activity.create({ data: { leadId, userId: user.id, type: "TAG_REMOVED", meta: { tag: tag.name } } });
   revalidatePath("/[tenant]/leads/[id]", "page");
   return { ok: "Tag entfernt." };
 }
@@ -189,7 +191,10 @@ export async function removeLeadTag(leadId: string, tagId: string): Promise<Chai
 export async function setLeadOptOut(leadId: string, optOut: boolean): Promise<ChainState> {
   const user = await requireUser();
   await getAccessibleLeadOr404(user, leadId);
-  await db.lead.update({ where: { id: leadId }, data: { emailOptOut: optOut } });
+  const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { emailOptOut: true } });
+  if (lead.emailOptOut === optOut) return { ok: optOut ? "Lead ist abgemeldet." : "Lead bekommt wieder E-Mails." };
+  await db.lead.update({ where: { id: leadId }, data: { emailOptOut: optOut, emailOptOutAt: optOut ? new Date() : null } });
+  await db.activity.create({ data: { leadId, userId: user.id, type: optOut ? "UNSUBSCRIBED" : "RESUBSCRIBED", meta: { via: "manual" } } });
   if (optOut) await db.chainRun.updateMany({ where: { leadId, status: "ACTIVE" }, data: { status: "CANCELLED", nextRunAt: null, finishedAt: new Date() } });
   revalidatePath("/[tenant]/leads/[id]", "page");
   return { ok: optOut ? "Lead ist abgemeldet." : "Lead bekommt wieder E-Mails." };

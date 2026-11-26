@@ -32,6 +32,11 @@ enum ActivityType {
   NOTE_ADDED
   REMINDER_SET
   REMINDER_DONE
+  TAG_ADDED
+  TAG_REMOVED
+  EMAIL_SENT
+  UNSUBSCRIBED
+  RESUBSCRIBED
 }
 
 /// Art eines geplanten Termins / einer Aufgabe zu einem Lead.
@@ -124,6 +129,8 @@ model Lead {
   /// Phase in der Pipeline (Kanban-Ansicht). Das alte Feld "status" wird nicht mehr angezeigt.
   /// Abgemeldet vom E-Mail-Marketing (Abmelde-Link): bekommt keine Ketten-Mails mehr.
   emailOptOut   Boolean       @default(false)
+  /// Zeitpunkt der Abmeldung vom E-Mail-Verteiler.
+  emailOptOutAt DateTime?
   stageId       String?
   stage         PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
   sourceEmailId String?       @unique
