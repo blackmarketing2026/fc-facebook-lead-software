@@ -28,7 +28,7 @@ export async function GET() {
   // Vertriebler: eigene Leads, Admin: alle.
   const newLeadWhere = {
     ...leadScope(user),
-    status: "NEU" as const,
+    stage: { isDefault: true },
     createdAt: { gte: new Date(now.getTime() - NEW_LEAD_DAYS * 24 * 60 * 60 * 1000) },
   };
   const [reminders, newLeads, newLeadCount] = await Promise.all([

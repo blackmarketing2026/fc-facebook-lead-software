@@ -118,9 +118,11 @@ async function createLead(
 ) {
   // Leads werden nicht mehr automatisch verteilt.
   const assignedToId: string | null = null;
+  const defaultStage = await tx.pipelineStage.findFirst({ where: { tenantId, isDefault: true }, select: { id: true } });
   const lead = await tx.lead.create({
     data: {
       tenantId,
+      stageId: defaultStage?.id ?? null,
       receivedAt: receivedAt ?? new Date(),
       fullName: parsed.fullName,
       email: parsed.email,

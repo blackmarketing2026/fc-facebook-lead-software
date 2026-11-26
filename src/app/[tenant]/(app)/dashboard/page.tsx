@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { StatusBadge } from "@/components/status-badge";
 import { leadScope } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime, parseBerlinLocal, TIMEZONE } from "@/lib/format";
 import { googleCalendarUrl } from "@/lib/ics";
-import { STATUS_LABELS, STATUSES } from "@/lib/labels";
 import { reminderEvent } from "@/lib/reminder-calendar";
 import { REMINDER_LEAD_MINUTES, reminderIcon, reminderLabel } from "@/lib/reminder-types";
 import { requireUser } from "@/lib/session";
@@ -34,12 +32,12 @@ export default async function DashboardPage() {
       orderBy: { dueAt: "asc" },
       take: 30,
       include: {
-        lead: { select: { id: true, fullName: true, phone: true, email: true, status: true } },
+        lead: { select: { id: true, fullName: true, phone: true, email: true } },
         user: { select: { displayName: true } },
       },
     }),
     db.lead.findMany({
-      where: { tenantId: user.tenantId, assignedToId: user.id, status: "NEU" },
+      where: { tenantId: user.tenantId, stage: { isDefault: true } },
       orderBy: { receivedAt: "asc" },
       take: 20,
       select: { id: true, fullName: true, phone: true, receivedAt: true },
@@ -144,14 +142,15 @@ export default async function DashboardPage() {
 
 async function AdminStats({ tenantId, slug, todayStart }: { tenantId: string; slug: string; todayStart: Date }) {
   const weekStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
-  const [today, week, byStatus, latest] = await Promise.all([
+  const [today, week, stages, latest] = await Promise.all([
     db.lead.count({ where: { tenantId, receivedAt: { gte: todayStart } } }),
     db.lead.count({ where: { tenantId, receivedAt: { gte: weekStart } } }),
-    db.lead.groupBy({ by: ["status"], where: { tenantId }, _count: true }),
+    db.pipelineStage.findMany({ where: { tenantId }, orderBy: { position: "asc" }, select: { id: true, name: true, _count: { select: { leads: true } } } }),
     db.lead.findMany({
       where: { tenantId },
       orderBy: { receivedAt: "desc" },
       take: 8,
+      include: { stage: { select: { name: true } } },
     }),
   ]);
   return (
@@ -167,14 +166,14 @@ async function AdminStats({ tenantId, slug, todayStart }: { tenantId: string; sl
       </section>
 
       <section className="card p-5">
-        <h2 className="mb-3 font-semibold">Status-Übersicht</h2>
+        <h2 className="mb-3 font-semibold">Pipeline</h2>
         <ul className="space-y-2 text-sm">
-          {STATUSES.map((s) => (
-            <li key={s} className="flex items-center justify-between">
-              <Link href={tenantPath(slug, `/leads?status=${s}`)} className="hover:underline">
-                {STATUS_LABELS[s]}
+          {stages.map((s) => (
+            <li key={s.id} className="flex items-center justify-between">
+              <Link href={tenantPath(slug, `/leads?ansicht=tabelle&phase=${s.id}`)} className="hover:underline">
+                {s.name}
               </Link>
-              <span className="tabular-nums">{byStatus.find((b) => b.status === s)?._count ?? 0}</span>
+              <span className="tabular-nums">{s._count.leads}</span>
             </li>
           ))}
         </ul>
@@ -189,7 +188,7 @@ async function AdminStats({ tenantId, slug, todayStart }: { tenantId: string; sl
                 <Link href={tenantPath(slug, `/leads/${l.id}`)} className="truncate font-medium text-blue-700 hover:underline">
                   {l.fullName ?? "Unbekannt"}
                 </Link>
-                <StatusBadge status={l.status} />
+                <span className="badge bg-slate-100 text-slate-700">{l.stage?.name ?? "–"}</span>
               </div>
               <div className="text-xs text-slate-500">
                 {formatDateTime(l.receivedAt)}

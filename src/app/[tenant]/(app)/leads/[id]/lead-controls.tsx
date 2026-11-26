@@ -1,6 +1,6 @@
 "use client";
 
-import type { LeadStatus, ReminderType } from "@prisma/client";
+import type { ReminderType } from "@prisma/client";
 import { useParams } from "next/navigation";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
@@ -9,26 +9,26 @@ import {
   createReminder,
   deleteReminder,
   trackContact,
-  updateStatus,
   type FormState,
 } from "@/app/actions/leads";
-import { STATUS_LABELS } from "@/lib/labels";
+import { moveLeadToStage } from "@/app/actions/pipeline";
 import { DURATION_OPTIONS, formatDuration, REMINDER_LEAD_MINUTES, REMINDER_TYPE_KEYS, REMINDER_TYPES } from "@/lib/reminder-types";
 
-/** Status-Auswahl. */
-export function StatusSelect({ leadId, status, statuses }: { leadId: string; status: LeadStatus; statuses: LeadStatus[] }) {
+/** Phase-Auswahl (wie die Spalten der Pipeline). */
+export function StageSelect({ leadId, stageId, stages }: { leadId: string; stageId: string | null; stages: { id: string; name: string }[] }) {
   const [pending, start] = useTransition();
   return (
     <select
       className="input w-auto"
-      value={status}
+      value={stageId ?? ""}
       disabled={pending}
-      onChange={(e) => start(() => updateStatus(leadId, e.target.value as LeadStatus))}
-      aria-label="Status"
+      onChange={(e) => e.target.value && start(async () => void (await moveLeadToStage(leadId, e.target.value)))}
+      aria-label="Phase"
     >
-      {statuses.map((s) => (
-        <option key={s} value={s}>
-          {STATUS_LABELS[s]}
+      {!stageId && <option value="">–</option>}
+      {stages.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.name}
         </option>
       ))}
     </select>
@@ -114,11 +114,9 @@ export function ReminderForm({ leadId, defaultDue }: { leadId: string; defaultDu
   const ref = useResetOnSuccess(state);
   const [type, setType] = useState<ReminderType>("RUECKRUF");
   const [duration, setDuration] = useState(REMINDER_TYPES.RUECKRUF.duration);
-  const [setTermin, setSetTermin] = useState(REMINDER_TYPES.RUECKRUF.setTermin);
   const choose = (t: ReminderType) => {
     setType(t);
     setDuration(REMINDER_TYPES[t].duration);
-    setSetTermin(REMINDER_TYPES[t].setTermin);
   };
   return (
     <form ref={ref} action={action} className="space-y-3">
@@ -164,16 +162,6 @@ export function ReminderForm({ leadId, defaultDue }: { leadId: string; defaultDu
       <label className="block">
         <span className="label">Kommentar (optional)</span>
         <input name="comment" className="input" />
-      </label>
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          name="setTermin"
-          checked={setTermin}
-          onChange={(e) => setSetTermin(e.target.checked)}
-          className="h-4 w-4"
-        />
-        Status auf „Termin“ setzen
       </label>
       {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state?.ok && <p className="text-sm text-green-700">{state.message ?? "Gespeichert."} Du wirst {REMINDER_LEAD_MINUTES} Minuten vorher erinnert.</p>}

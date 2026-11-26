@@ -206,3 +206,6 @@ body {
   .app-shell .card { border-radius: 16px; }
 }
 
+
+.menu-item { display: block; width: 100%; padding: 6px 12px; border-radius: 6px; text-align: left; }
+.menu-item:hover { background: #f1f5f9; }

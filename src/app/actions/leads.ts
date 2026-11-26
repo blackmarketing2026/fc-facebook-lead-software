@@ -1,7 +1,7 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import type { LeadStatus, ReminderType } from "@prisma/client";
+import type { ReminderType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
@@ -9,29 +9,12 @@ import { parseBerlinLocal } from "@/lib/format";
 import { mailerConfigured } from "@/lib/mailer";
 import { sendReminderMail } from "@/lib/reminder-mail";
 import { REMINDER_TYPE_KEYS, reminderLabel } from "@/lib/reminder-types";
-import { STATUSES } from "@/lib/labels";
 import { requireAdmin, requireUser } from "@/lib/session";
 
 function refreshLead() {
   revalidatePath("/[tenant]/leads/[id]", "page");
   revalidatePath("/[tenant]/leads", "page");
   revalidatePath("/[tenant]/dashboard", "page");
-}
-
-export async function updateStatus(leadId: string, status: LeadStatus) {
-  const user = await requireUser();
-  await getAccessibleLeadOr404(user, leadId);
-  const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { status: true, tenant: { select: { slug: true } } } });
-  if (!STATUSES.includes(status)) throw new Error("Ungültiger Status");
-  if (lead.status === status) return;
-  await db.lead.update({
-    where: { id: leadId },
-    data: {
-      status,
-      activities: { create: { type: "STATUS_CHANGED", userId: user.id, meta: { from: lead.status, to: status } } },
-    },
-  });
-  refreshLead();
 }
 
 export type FormState = { error?: string; ok?: boolean; message?: string } | undefined;
@@ -54,22 +37,14 @@ const CONTACT_TYPES = {
   email: "EMAIL_CLICKED",
 } as const;
 
-/** Protokolliert einen Klick auf Anruf/WhatsApp/E-Mail; ein neuer Lead gilt danach als kontaktiert. */
+/** Protokolliert einen Klick auf Anruf/WhatsApp/E-Mail. */
 export async function trackContact(leadId: string, channel: keyof typeof CONTACT_TYPES) {
   const user = await requireUser();
   await getAccessibleLeadOr404(user, leadId);
   const type = CONTACT_TYPES[channel];
   if (!type) return;
 
-  await db.$transaction(async (tx) => {
-    await tx.activity.create({ data: { leadId, userId: user.id, type } });
-    const updated = await tx.lead.updateMany({ where: { id: leadId, status: "NEU" }, data: { status: "KONTAKTIERT" } });
-    if (updated.count > 0) {
-      await tx.activity.create({
-        data: { leadId, userId: user.id, type: "STATUS_CHANGED", meta: { from: "NEU", to: "KONTAKTIERT", auto: true } },
-      });
-    }
-  });
+  await db.activity.create({ data: { leadId, userId: user.id, type } });
   refreshLead();
 }
 
@@ -85,14 +60,13 @@ export async function createReminder(leadId: string, _prev: FormState, formData:
   if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) return { error: "Ungültige Dauer." };
   const title = String(formData.get("title") ?? "").trim() || reminderLabel(type);
   const comment = String(formData.get("comment") ?? "").trim() || null;
-  const setTermin = formData.get("setTermin") === "on";
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(dueRaw)) return { error: "Bitte Datum und Uhrzeit wählen." };
 
   const dueAt = parseBerlinLocal(dueRaw);
   if (Number.isNaN(dueAt.getTime())) return { error: "Ungültiges Datum." };
 
   // Termine gehören dem zuständigen Vertriebler; legt der Admin sie an, landen sie bei diesem.
-  const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { assignedToId: true, status: true } });
+  const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, select: { assignedToId: true } });
   const ownerId = user.role === "ADMIN" && lead.assignedToId ? lead.assignedToId : user.id;
 
   const reminder = await db.$transaction(async (tx) => {
@@ -100,12 +74,6 @@ export async function createReminder(leadId: string, _prev: FormState, formData:
     await tx.activity.create({
       data: { leadId, userId: user.id, type: "REMINDER_SET", meta: { dueAt: dueAt.toISOString(), title, type } },
     });
-    if (setTermin && lead.status !== "TERMIN") {
-      await tx.lead.update({ where: { id: leadId }, data: { status: "TERMIN" } });
-      await tx.activity.create({
-        data: { leadId, userId: user.id, type: "STATUS_CHANGED", meta: { from: lead.status, to: "TERMIN" } },
-      });
-    }
     return created;
   });
   refreshLead();
@@ -161,7 +129,8 @@ export async function resetLead(leadId: string) {
     await tx.note.deleteMany({ where: { leadId } });
     await tx.reminder.deleteMany({ where: { leadId } });
     await tx.activity.deleteMany({ where: { leadId } });
-    await tx.lead.update({ where: { id: leadId }, data: { status: "NEU", assignedToId: null, createdAt: new Date() } });
+    const defaultStage = await tx.pipelineStage.findFirst({ where: { tenantId: admin.tenantId, isDefault: true }, select: { id: true } });
+    await tx.lead.update({ where: { id: leadId }, data: { status: "NEU", stageId: defaultStage?.id ?? null, assignedToId: null, createdAt: new Date() } });
   });
   refreshLead();
 }

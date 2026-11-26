@@ -65,6 +65,7 @@ model Tenant {
 
   users         User[]
   leads         Lead[]
+  stages        PipelineStage[]
   inboundEmails InboundEmail[]
 }
 
@@ -118,6 +119,9 @@ model Lead {
   rawJson       Json
   assignedToId  String?
   assignedTo    User?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  /// Phase in der Pipeline (Kanban-Ansicht). Das alte Feld "status" wird nicht mehr angezeigt.
+  stageId       String?
+  stage         PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
   sourceEmailId String?       @unique
   sourceEmail   InboundEmail? @relation(fields: [sourceEmailId], references: [id], onDelete: SetNull)
   /// Provisionseinnahme in Euro, Pflicht beim Status ABGESCHLOSSEN.
@@ -137,6 +141,23 @@ model Lead {
   @@index([assignedToId, receivedAt])
   @@index([tenantId, closedAt])
   @@index([tenantId, createdAt])
+  @@index([stageId])
+}
+
+/// Frei definierbare Phase der Lead-Pipeline (eine Spalte in der Kanban-Ansicht).
+model PipelineStage {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(80)
+  position  Int
+  /// Neue Leads landen in dieser Phase; sie kann nicht gelöscht werden.
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  leads Lead[]
+
+  @@index([tenantId, position])
 }
 
 model LeadAnswer {

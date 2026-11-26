@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
-import { STATUS_LABELS } from "@/lib/labels";
 import { leadListFilters, leadListWhere } from "@/lib/lead-filters";
 import { getCurrentUser } from "@/lib/session";
 
@@ -21,11 +20,11 @@ export async function GET(request: Request) {
   const leads = await db.lead.findMany({
     where: leadListWhere(user, leadListFilters(params)),
     orderBy: { receivedAt: "desc" },
-    include: { assignedTo: { select: { displayName: true } } },
+    include: { assignedTo: { select: { displayName: true } }, stage: { select: { name: true } } },
     take: 10_000,
   });
 
-  const header = ["Eingang", "Name", "Telefon", "E-Mail", "Sprache", "Status", "Zugewiesen"];
+  const header = ["Eingang", "Name", "Telefon", "E-Mail", "Sprache", "Phase", "Zugewiesen"];
   const rows = leads.map((l) =>
     [
       formatDateTime(l.receivedAt),
@@ -33,7 +32,7 @@ export async function GET(request: Request) {
       l.phone,
       l.email,
       l.language,
-      STATUS_LABELS[l.status],
+      l.stage?.name,
       l.assignedTo?.displayName,
     ].map(csvCell),
   );

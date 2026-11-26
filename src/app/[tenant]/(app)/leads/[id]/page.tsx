@@ -1,11 +1,10 @@
-import type { ActivityType, LeadStatus, ReminderType } from "@prisma/client";
+import type { ActivityType, ReminderType } from "@prisma/client";
 import Link from "next/link";
 import { ResetLeadButton } from "@/components/reset-lead-button";
-import { StatusBadge } from "@/components/status-badge";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime, telHref, TIMEZONE, whatsappNumber } from "@/lib/format";
-import { ACTIVITY_LABELS, STATUS_LABELS, STATUSES } from "@/lib/labels";
+import { ACTIVITY_LABELS } from "@/lib/labels";
 import { googleCalendarUrl } from "@/lib/ics";
 import { isContactKey } from "@/lib/lead-parser";
 import { reminderEvent } from "@/lib/reminder-calendar";
@@ -17,7 +16,7 @@ import {
   NoteForm,
   ReminderActions,
   ReminderForm,
-  StatusSelect,
+  StageSelect,
 } from "./lead-controls";
 
 export const metadata = { title: "Lead" };
@@ -33,7 +32,7 @@ function activityText(type: ActivityType, meta: unknown, users: Map<string, stri
   const m = (meta ?? {}) as Record<string, unknown>;
   switch (type) {
     case "STATUS_CHANGED": {
-      return `Status: ${STATUS_LABELS[m.from as LeadStatus] ?? m.from} → ${STATUS_LABELS[m.to as LeadStatus] ?? m.to}${m.auto ? " (automatisch)" : ""}`;
+      return `Phase: ${(m.fromStage as string) ?? "–"} → ${(m.toStage as string) ?? "–"}`;
     }
     case "ASSIGNED":
       if (m.pool) return "Zurück in den freien Pool gegeben";
@@ -55,12 +54,14 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
       include: {
         tenant: { select: { id: true, name: true, slug: true } },
         assignedTo: { select: { id: true, displayName: true } },
+        stage: { select: { name: true } },
         answers: { orderBy: { position: "asc" } },
         notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { displayName: true } } } },
         reminders: { orderBy: [{ done: "asc" }, { dueAt: "asc" }], include: { user: { select: { displayName: true } } } },
         activities: { orderBy: { createdAt: "desc" }, include: { user: { select: { displayName: true } } } },
       },
     });
+  const stages = await db.pipelineStage.findMany({ where: { tenantId: lead.tenantId }, orderBy: { position: "asc" }, select: { id: true, name: true } });
   const userNames = new Map<string, string>();
   if (lead.assignedTo) userNames.set(lead.assignedTo.id, lead.assignedTo.displayName);
 
@@ -95,8 +96,8 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           </div>
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-slate-500">Status</span>
-              <StatusSelect leadId={lead.id} status={lead.status} statuses={STATUSES} />
+              <span className="text-sm text-slate-500">Phase</span>
+              <StageSelect leadId={lead.id} stageId={lead.stageId} stages={stages} />
             </div>
           </div>
         </div>
@@ -201,7 +202,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
               ))}
             </ol>
             <div className="mt-4 text-xs text-slate-400">
-              Aktueller Status: <StatusBadge status={lead.status} />
+              Aktuelle Phase: <span className="badge bg-slate-100 text-slate-700">{lead.stage?.name ?? "–"}</span>
             </div>
           </section>
         </div>

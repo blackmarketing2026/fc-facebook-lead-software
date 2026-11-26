@@ -1,10 +1,9 @@
-import type { LeadStatus, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { leadScope } from "./access";
 import { parseBerlinLocal } from "./format";
-import { STATUSES } from "./labels";
 import type { CurrentUser } from "./session";
 
-export type LeadListFilters = { q: string; status: LeadStatus | ""; from: string; to: string };
+export type LeadListFilters = { q: string; stage: string; from: string; to: string };
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -15,7 +14,7 @@ function str(v: string | string[] | undefined) {
 export function leadListFilters(sp: Params): LeadListFilters {
   return {
     q: str(sp.q).trim(),
-    status: str(sp.status) as LeadStatus | "",
+    stage: str(sp.phase),
     from: str(sp.from),
     to: str(sp.to),
   };
@@ -24,7 +23,7 @@ export function leadListFilters(sp: Params): LeadListFilters {
 /** Filter der Lead-Liste; gilt auch für den CSV-Export. */
 export function leadListWhere(user: CurrentUser, f: LeadListFilters): Prisma.LeadWhereInput {
   const where: Prisma.LeadWhereInput = { ...leadScope(user) };
-  if (f.status && STATUSES.includes(f.status)) where.status = f.status;
+  if (f.stage) where.stageId = f.stage;
   if (f.from || f.to) {
     where.receivedAt = {
       ...(f.from ? { gte: parseBerlinLocal(`${f.from}T00:00`) } : {}),
