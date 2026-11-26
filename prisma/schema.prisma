@@ -37,6 +37,8 @@ enum ActivityType {
   EMAIL_SENT
   UNSUBSCRIBED
   RESUBSCRIBED
+  EMAIL_BOUNCED
+  EMAIL_COMPLAINT
 }
 
 /// Art eines geplanten Termins / einer Aufgabe zu einem Lead.
@@ -378,6 +380,15 @@ model ChainSend {
   status  SendStatus
   error   String?    @db.Text
   sentAt  DateTime   @default(now())
+  /// Statistik: erste Öffnung (Tracking-Pixel) und Zähler, erster Klick und Zähler.
+  openedAt   DateTime?
+  openCount  Int        @default(0)
+  clickedAt  DateTime?
+  clickCount Int        @default(0)
+  /// Zustellfehler (Bounce) bzw. Spam-Beschwerde, aus Rückläufer-Mails im Postfach erkannt.
+  bouncedAt    DateTime?
+  bounceReason String?   @db.VarChar(300)
+  complainedAt DateTime?
 
   @@index([chainId, sentAt])
 }

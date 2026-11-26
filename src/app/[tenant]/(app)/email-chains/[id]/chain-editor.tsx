@@ -1,12 +1,13 @@
 "use client";
 
 import { useActionState, useRef, useState, useTransition } from "react";
-import { addStep, deleteChain, deleteStep, moveStep, sendTestStep, setChainActive, updateChain, updateStep, type ChainState } from "@/app/actions/chains";
+import { addStep, deleteChain, deleteStep, moveStep, reorderSteps, sendTestStep, setChainActive, updateChain, updateStep, type ChainState } from "@/app/actions/chains";
 
 type StepData = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS"; waitTime: string };
 /** `key` bleibt stabil, auch wenn aus der vorläufigen ID nach dem Speichern die echte wird. */
 type Step = StepData & { key: string; saving?: boolean };
 type Chain = { id: string; name: string; active: boolean; tag: string };
+export type StepStatsData = { sent: number; bounced: number; opened: number; clicked: number };
 
 const UNITS: Record<StepData["waitUnit"], string> = { MINUTES: "Minuten", HOURS: "Stunden", DAYS: "Tage" };
 
@@ -19,12 +20,13 @@ function Status({ state }: { state: ChainState }) {
   );
 }
 
-export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail }: { chain: Chain; steps: StepData[]; knownTags: string[]; testEmail: string }) {
+export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, stats, tracking }: { chain: Chain; steps: StepData[]; knownTags: string[]; testEmail: string; stats: Record<string, StepStatsData>; tracking: boolean }) {
   const [settings, settingsAction, settingsPending] = useActionState(updateChain.bind(null, chain.id), undefined);
   const [busy, start] = useTransition();
   const [info, setInfo] = useState<ChainState>();
   const [steps, setSteps] = useState<Step[]>(() => initialSteps.map((s) => ({ ...s, key: s.id })));
   const tempCounter = useRef(0);
+  const [dragKey, setDragKey] = useState<string | null>(null);
 
   const run = (fn: () => Promise<ChainState | void>) =>
     start(async () => {
@@ -70,6 +72,27 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail }
       return next;
     });
     void moveStep(step.id, direction).then((res) => {
+      if (res?.error) {
+        setSteps(before);
+        setInfo(res);
+      }
+    });
+  }
+
+  /** Drag & Drop: Schritt `fromKey` an die Einfüge-Position `toIndex` (0 = direkt nach dem Start) verschieben. */
+  function reorder(fromKey: string, toIndex: number) {
+    setDragKey(null);
+    if (steps.some((s) => s.saving)) return;
+    const from = steps.findIndex((s) => s.key === fromKey);
+    if (from < 0) return;
+    const insertAt = toIndex > from ? toIndex - 1 : toIndex;
+    if (insertAt === from) return;
+    const before = steps;
+    const next = [...steps];
+    const [moved] = next.splice(from, 1);
+    next.splice(insertAt, 0, moved);
+    setSteps(next);
+    void reorderSteps(chain.id, next.map((s) => s.id)).then((res) => {
       if (res?.error) {
         setSteps(before);
         setInfo(res);
@@ -128,11 +151,11 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail }
         <div className="mx-auto flex items-center gap-2 rounded-full bg-green-600 px-5 py-2 text-sm font-semibold text-white shadow">
           ▶ Start · Tag „{chain.tag}“ wird vergeben
         </div>
-        <Connector index={0} onAdd={insert} />
+        <Connector index={0} onAdd={insert} dragKey={dragKey} onDropStep={reorder} />
         {steps.map((step, i) => (
           <div key={step.key} className="flex flex-col items-stretch">
-            <StepCard step={step} index={i} total={steps.length} testEmail={testEmail} onMove={move} onRemove={remove} onSaved={saved} />
-            <Connector index={i + 1} onAdd={insert} />
+            <StepCard step={step} index={i} total={steps.length} testEmail={testEmail} onMove={move} onRemove={remove} onSaved={saved} stats={stats[step.id]} tracking={tracking} dragKey={dragKey} setDragKey={setDragKey} onDropStep={reorder} />
+            <Connector index={i + 1} onAdd={insert} dragKey={dragKey} onDropStep={reorder} />
           </div>
         ))}
         {steps.length === 0 && <p className="mb-2 text-center text-xs text-slate-400">Noch keine Schritte – füge mit „+“ eine E-Mail oder Wartezeit hinzu.</p>}
@@ -142,15 +165,30 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail }
   );
 }
 
-function Connector({ index, onAdd }: { index: number; onAdd: (index: number, type: "EMAIL" | "WAIT") => void }) {
+function Connector({ index, onAdd, dragKey, onDropStep }: { index: number; onAdd: (index: number, type: "EMAIL" | "WAIT") => void; dragKey: string | null; onDropStep: (fromKey: string, toIndex: number) => void }) {
   const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(false);
   const add = (type: "EMAIL" | "WAIT") => {
     setOpen(false);
     onAdd(index, type);
   };
   return (
-    <div className="relative mx-auto flex h-14 w-full flex-col items-center">
-      <div className="h-full w-px bg-slate-300" />
+    <div
+      className="relative mx-auto flex h-14 w-full flex-col items-center"
+      onDragOver={(e) => {
+        if (!dragKey) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        if (dragKey) onDropStep(dragKey, index);
+      }}
+    >
+      <div className={`h-full w-px ${over ? "bg-blue-500" : "bg-slate-300"}`} />
+      {over && <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded bg-blue-500" />}
       <div className="absolute inset-0 flex items-center justify-center">
         {open ? (
           <div className="flex gap-2 rounded-xl bg-white p-2 shadow-lg ring-1 ring-slate-200">
@@ -181,12 +219,32 @@ type CardProps = {
   onMove: (step: Step, direction: -1 | 1) => void;
   onRemove: (step: Step) => void;
   onSaved: (key: string, patch: Partial<StepData>) => void;
+  stats?: StepStatsData;
+  tracking: boolean;
+  dragKey: string | null;
+  setDragKey: (key: string | null) => void;
+  onDropStep: (fromKey: string, toIndex: number) => void;
 };
 
-function StepControls({ step, index, total, onMove, onRemove }: Pick<CardProps, "step" | "index" | "total" | "onMove" | "onRemove">) {
+function StepControls({ step, index, total, onMove, onRemove, setDragKey, cardRef }: Pick<CardProps, "step" | "index" | "total" | "onMove" | "onRemove" | "setDragKey"> & { cardRef: React.RefObject<HTMLDivElement | null> }) {
   const locked = Boolean(step.saving);
   return (
     <div className="flex items-center gap-1 text-slate-500">
+      <span
+        draggable={!locked}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", step.key);
+          if (cardRef.current) e.dataTransfer.setDragImage(cardRef.current, 24, 24);
+          setDragKey(step.key);
+        }}
+        onDragEnd={() => setDragKey(null)}
+        title="Ziehen, um den Schritt zu verschieben"
+        aria-label="Schritt per Drag and Drop verschieben"
+        className={`hidden cursor-grab select-none rounded px-2 py-1 text-base leading-none hover:bg-slate-100 active:cursor-grabbing md:inline-block ${locked ? "opacity-30" : ""}`}
+      >
+        ⠿
+      </span>
       <button type="button" disabled={locked || index === 0} aria-label="Nach oben" className="rounded px-2 py-1 hover:bg-slate-100 disabled:opacity-30" onClick={() => onMove(step, -1)}>↑</button>
       <button type="button" disabled={locked || index === total - 1} aria-label="Nach unten" className="rounded px-2 py-1 hover:bg-slate-100 disabled:opacity-30" onClick={() => onMove(step, 1)}>↓</button>
       <button type="button" disabled={locked} aria-label="Schritt löschen" className="rounded px-2 py-1 text-red-600 hover:bg-red-50 disabled:opacity-30" onClick={() => onRemove(step)}>🗑</button>
@@ -213,12 +271,68 @@ function StepCard(props: CardProps) {
   };
   const disabled = pending || Boolean(step.saving);
 
-  if (step.type === "WAIT") return <WaitCard {...props} submit={submit} state={state} disabled={disabled} pending={pending} />;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [dropSide, setDropSide] = useState<"before" | "after" | null>(null);
+  const { dragKey, onDropStep, index } = props;
+  const droppable = Boolean(dragKey) && dragKey !== step.key;
 
-  return <EmailCard {...props} submit={submit} state={state} disabled={disabled} pending={pending} />;
+  return (
+    <div
+      ref={cardRef}
+      className={`relative ${dragKey === step.key ? "opacity-40" : ""}`}
+      onDragOver={(e) => {
+        if (!droppable) return;
+        e.preventDefault();
+        const r = e.currentTarget.getBoundingClientRect();
+        setDropSide(e.clientY < r.top + r.height / 2 ? "before" : "after");
+      }}
+      onDragLeave={() => setDropSide(null)}
+      onDrop={(e) => {
+        e.preventDefault();
+        const side = dropSide;
+        setDropSide(null);
+        if (dragKey && droppable) onDropStep(dragKey, side === "after" ? index + 1 : index);
+      }}
+    >
+      {droppable && dropSide === "before" && <div className="absolute -top-1 left-0 right-0 z-10 h-1 rounded bg-blue-500" />}
+      {droppable && dropSide === "after" && <div className="absolute -bottom-1 left-0 right-0 z-10 h-1 rounded bg-blue-500" />}
+      {step.type === "WAIT" ? (
+        <WaitCard {...props} cardRef={cardRef} submit={submit} state={state} disabled={disabled} pending={pending} />
+      ) : (
+        <EmailCard {...props} cardRef={cardRef} submit={submit} state={state} disabled={disabled} pending={pending} />
+      )}
+    </div>
+  );
 }
 
-function EmailCard({ step, index, total, testEmail, onMove, onRemove, submit, state, disabled, pending }: CardProps & { submit: (e: React.FormEvent<HTMLFormElement>) => void; state: ChainState; disabled: boolean; pending: boolean }) {
+const STAT_ITEMS: { key: keyof StepStatsData; icon: string; label: string }[] = [
+  { key: "sent", icon: "✉️", label: "Erhalten (verschickt)" },
+  { key: "bounced", icon: "⚠️", label: "Bounce / Spam-Beschwerde" },
+  { key: "opened", icon: "👁", label: "Geöffnet" },
+  { key: "clicked", icon: "🖱", label: "Auf Link geklickt" },
+];
+
+/** Statistik einer E-Mail: Icons mit der Zahl schattiert darunter. */
+export function StatsRow({ stats, tracking }: { stats?: StepStatsData; tracking: boolean }) {
+  const s = stats ?? { sent: 0, bounced: 0, opened: 0, clicked: 0 };
+  const pct = (n: number) => (s.sent ? `${Math.round((n / s.sent) * 100)} % der verschickten` : "noch nichts verschickt");
+  return (
+    <div className="mt-3 grid grid-cols-4 gap-2 border-t border-slate-100 pt-3 text-center" aria-label="Statistik">
+      {STAT_ITEMS.map((it) => {
+        const off = !tracking && (it.key === "opened" || it.key === "clicked");
+        return (
+          <div key={it.key} title={off ? `${it.label}: Messung ausgeschaltet` : `${it.label}: ${s[it.key]} (${it.key === "sent" ? "Anzahl" : pct(s[it.key])})`} className={off ? "opacity-40" : ""}>
+            <div className="text-xl leading-none" aria-hidden="true">{it.icon}</div>
+            <div className="mt-1 text-xs tabular-nums text-slate-400">{off ? "aus" : s[it.key]}</div>
+            <div className="sr-only">{it.label}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EmailCard({ step, index, total, testEmail, onMove, onRemove, setDragKey, cardRef, stats, tracking, submit, state, disabled, pending }: CardProps & { cardRef: React.RefObject<HTMLDivElement | null>; submit: (e: React.FormEvent<HTMLFormElement>) => void; state: ChainState; disabled: boolean; pending: boolean }) {
   const [open, setOpen] = useState(!step.subject);
   const [to, setTo] = useState(testEmail);
   const [testing, startTest] = useTransition();
@@ -230,8 +344,9 @@ function EmailCard({ step, index, total, testEmail, onMove, onRemove, submit, st
           <span className="text-sm font-semibold text-blue-900">✉️ E-Mail {step.saving && <span className="font-normal text-blue-600">· wird angelegt …</span>}</span>
           <span className="block truncate text-sm text-slate-600">{step.subject || "Noch kein Betreff – zum Bearbeiten öffnen"}</span>
         </button>
-        <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} />
+        <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} setDragKey={setDragKey} cardRef={cardRef} />
       </div>
+      <StatsRow stats={stats} tracking={tracking} />
       {open && (
         <form onSubmit={submit} className="mt-3 space-y-3">
           <label className="block">
@@ -271,7 +386,7 @@ const UNTIL_OPTIONS: { days: number; label: string }[] = [
   { days: 30, label: "in 30 Tagen" },
 ];
 
-function WaitCard({ step, index, total, onMove, onRemove, submit, state, disabled, pending }: CardProps & { submit: (e: React.FormEvent<HTMLFormElement>) => void; state: ChainState; disabled: boolean; pending: boolean }) {
+function WaitCard({ step, index, total, onMove, onRemove, setDragKey, cardRef, submit, state, disabled, pending }: CardProps & { cardRef: React.RefObject<HTMLDivElement | null>; submit: (e: React.FormEvent<HTMLFormElement>) => void; state: ChainState; disabled: boolean; pending: boolean }) {
   const [mode, setMode] = useState<"duration" | "until">(step.waitTime ? "until" : "duration");
   const [unit, setUnit] = useState<StepData["waitUnit"]>(step.waitUnit);
   const [days, setDays] = useState(step.waitTime ? step.waitValue : 1);
@@ -281,7 +396,7 @@ function WaitCard({ step, index, total, onMove, onRemove, submit, state, disable
     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-semibold text-amber-900">⏱ Wartezeit {step.saving && <span className="font-normal text-amber-700">· wird angelegt …</span>}</span>
-        <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} />
+        <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} setDragKey={setDragKey} cardRef={cardRef} />
       </div>
       <form onSubmit={submit} className="mt-2 space-y-3">
         <div className="flex flex-wrap gap-x-5 gap-y-1">

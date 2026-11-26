@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import { createChain, saveAutoTag } from "@/app/actions/chains";
+import { useActionState, useState, useTransition } from "react";
+import { createChain, saveAutoTag, setTracking, type ChainState } from "@/app/actions/chains";
 
 export function NewChainForm({ existingTags, defaultTag }: { existingTags: string[]; defaultTag: string }) {
   const [state, action, pending] = useActionState(createChain, undefined);
@@ -40,5 +40,34 @@ export function AutoTagForm({ initial }: { initial: string }) {
       {state?.ok && <span className="text-sm text-green-700">{state.ok}</span>}
       {state?.error && <span className="text-sm text-red-600">{state.error}</span>}
     </form>
+  );
+}
+
+export function TrackingToggle({ enabled }: { enabled: boolean }) {
+  const [on, setOn] = useState(enabled);
+  const [pending, start] = useTransition();
+  const [state, setState] = useState<ChainState>();
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        disabled={pending}
+        className={on ? "btn-secondary" : "btn-primary"}
+        onClick={() =>
+          start(async () => {
+            const next = !on;
+            setOn(next);
+            const res = await setTracking(next);
+            setState(res);
+            if (res?.error) setOn(!next);
+          })
+        }
+      >
+        {on ? "Messung ausschalten" : "Messung einschalten"}
+      </button>
+      <span className={`badge ${on ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-600"}`}>{on ? "an" : "aus"}</span>
+      {state?.ok && <span className="text-sm text-green-700">{state.ok}</span>}
+      {state?.error && <span className="text-sm text-red-600">{state.error}</span>}
+    </div>
   );
 }

@@ -1,16 +1,16 @@
 import Link from "next/link";
-import { getAutoTagName } from "@/lib/chains";
+import { getAutoTagName, getTrackingEnabled } from "@/lib/chains";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
-import { AutoTagForm, NewChainForm } from "./chain-forms";
+import { AutoTagForm, NewChainForm, TrackingToggle } from "./chain-forms";
 
 export const metadata = { title: "E-Mail-Ketten" };
 
 export default async function EmailChainsPage() {
   const admin = await requireAdmin();
   const base = tenantPath(admin.tenant.slug, "/email-chains");
-  const [chains, autoTag, tags] = await Promise.all([
+  const [chains, autoTag, tags, tracking] = await Promise.all([
     db.emailChain.findMany({
       where: { tenantId: admin.tenantId },
       orderBy: { createdAt: "desc" },
@@ -18,6 +18,7 @@ export default async function EmailChainsPage() {
     }),
     getAutoTagName(),
     db.tag.findMany({ where: { tenantId: admin.tenantId }, orderBy: { name: "asc" }, select: { name: true } }),
+    getTrackingEnabled(),
   ]);
   const runStats = await db.chainRun.groupBy({ by: ["chainId", "status"], where: { chain: { tenantId: admin.tenantId } }, _count: true });
   const stat = (chainId: string, status: string) => runStats.find((r) => r.chainId === chainId && r.status === status)?._count ?? 0;
@@ -39,6 +40,16 @@ export default async function EmailChainsPage() {
           startet sie sofort für neue Leads. Leer lassen = kein automatischer Tag.
         </p>
         <AutoTagForm initial={autoTag} />
+      </section>
+
+      <section className="card p-5">
+        <h2 className="mb-1 font-semibold">Statistik: Öffnungen und Klicks messen</h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Dafür enthält jede Ketten-Mail ein unsichtbares Zählpixel, und Links laufen über unseren Server. Bounces und Spam-Beschwerden
+          werden unabhängig davon aus Rückläufer-Mails im Lead-Postfach erkannt. Hinweis: In Deutschland brauchst du für die Messung
+          in der Regel eine Einwilligung und einen Hinweis in der Datenschutzerklärung.
+        </p>
+        <TrackingToggle enabled={tracking} />
       </section>
 
       <section className="space-y-3">

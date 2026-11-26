@@ -15,4 +15,6 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   EMAIL_SENT: "E-Mail verschickt",
   UNSUBSCRIBED: "Vom E-Mail-Verteiler abgemeldet",
   RESUBSCRIBED: "Wieder für E-Mails freigegeben",
+  EMAIL_BOUNCED: "E-Mail nicht zustellbar (Bounce)",
+  EMAIL_COMPLAINT: "Hat die E-Mail als Spam gemeldet",
 };

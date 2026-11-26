@@ -1,6 +1,8 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser, type AddressObject, type ParsedMail } from "mailparser";
 import { db } from "./db";
+import { parseBounce } from "./bounces";
+import { applyBounce } from "./chains";
 import { imapConfigured, imapSettings } from "./imap-settings";
 import { processInboundMail } from "./lead-service";
 
@@ -85,6 +87,13 @@ export async function pollMailbox(reconcile = false): Promise<PollResult> {
 
         for (const { uid, source } of messages) {
           const mail = await simpleParser(source);
+          // Rückläufer (Bounce) und Spam-Beschwerden zu Ketten-Mails: Statistik buchen, Mail danach aus dem Postfach löschen.
+          const bounce = parseBounce({ from: mail.from?.text, subject: mail.subject, raw: source.toString("utf8") });
+          if (bounce && (await applyBounce(bounce))) {
+            if (!(await client.messageDelete(uid, { uid: true }))) throw new Error(`IMAP-Mail ${uid} konnte nicht geloescht werden`);
+            deleted++;
+            continue;
+          }
           const messageId = mail.messageId || `uid-${uid}-${mail.date?.getTime() ?? 0}`;
           const existing = await db.inboundEmail.findUnique({
             where: { messageId },

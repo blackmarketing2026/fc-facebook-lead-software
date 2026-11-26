@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { validWait } from "@/lib/chain-logic";
-import { AUTO_TAG_KEY, addTagToLead, buildChainMail, cleanTagName, ensureTag } from "@/lib/chains";
+import { AUTO_TAG_KEY, TRACKING_KEY, addTagToLead, buildChainMail, cleanTagName, ensureTag } from "@/lib/chains";
 import { db } from "@/lib/db";
 import { mailerConfigured, sendMail } from "@/lib/mailer";
 import { requireAdmin, requireUser } from "@/lib/session";
@@ -142,6 +142,19 @@ export async function deleteStep(stepId: string): Promise<ChainState> {
   return { ok: "Schritt gelöscht." };
 }
 
+/** Setzt die Reihenfolge aller Schritte einer Kette (Drag & Drop). `order` enthält alle Schritt-IDs in der neuen Reihenfolge. */
+export async function reorderSteps(chainId: string, order: string[]): Promise<ChainState> {
+  const admin = await requireAdmin();
+  const [chain, steps] = await Promise.all([ownChain(chainId, admin.tenantId), db.emailChainStep.findMany({ where: { chainId }, select: { id: true } })]);
+  if (!chain) return { error: "Kette nicht gefunden." };
+  const known = new Set(steps.map((s) => s.id));
+  if (order.length !== known.size || new Set(order).size !== order.length || order.some((id) => !known.has(id))) {
+    return { error: "Die Schritte haben sich geändert. Bitte Seite neu laden." };
+  }
+  await db.$transaction(order.map((id, i) => db.emailChainStep.update({ where: { id }, data: { position: i } })));
+  return { ok: "Reihenfolge gespeichert." };
+}
+
 /** Schickt eine E-Mail eines Schritts mit Beispieldaten an eine Test-Adresse. */
 export async function sendTestStep(stepId: string, to: string): Promise<ChainState> {
   const admin = await requireAdmin();
@@ -157,6 +170,14 @@ export async function sendTestStep(stepId: string, to: string): Promise<ChainSta
   } catch (err) {
     return { error: `Versand fehlgeschlagen: ${(err as Error).message}` };
   }
+}
+
+/** Öffnungs- und Klick-Messung der Ketten-Mails ein- oder ausschalten. */
+export async function setTracking(enabled: boolean): Promise<ChainState> {
+  await requireAdmin();
+  await db.setting.upsert({ where: { key: TRACKING_KEY }, update: { value: enabled ? "1" : "0" }, create: { key: TRACKING_KEY, value: enabled ? "1" : "0" } });
+  refresh();
+  return { ok: enabled ? "Öffnungen und Klicks werden gemessen." : "Messung ausgeschaltet – neue Mails enthalten kein Tracking mehr." };
 }
 
 /** Tag, den jeder neue Lead automatisch bekommt (leer = keiner). */

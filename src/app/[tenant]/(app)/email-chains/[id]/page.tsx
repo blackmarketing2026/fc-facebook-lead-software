@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTrackingEnabled, stepStats } from "@/lib/chains";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { requireAdmin } from "@/lib/session";
@@ -16,7 +17,9 @@ export default async function ChainPage(props: PageProps<"/[tenant]/email-chains
     include: { triggerTag: { select: { name: true } }, steps: { orderBy: { position: "asc" } } },
   });
   if (!chain) notFound();
-  const [tags, runs, sends] = await Promise.all([
+  const [stats, tracking, tags, runs, sends] = await Promise.all([
+    stepStats(id),
+    getTrackingEnabled(),
     db.tag.findMany({ where: { tenantId: admin.tenantId }, orderBy: { name: "asc" }, select: { name: true } }),
     db.chainRun.findMany({
       where: { chainId: id },
@@ -40,6 +43,8 @@ export default async function ChainPage(props: PageProps<"/[tenant]/email-chains
         chain={{ id: chain.id, name: chain.name, active: chain.active, tag: chain.triggerTag.name }}
         steps={chain.steps.map((s) => ({ id: s.id, type: s.type, subject: s.subject ?? "", body: s.body ?? "", waitValue: s.waitValue ?? 1, waitUnit: s.waitUnit ?? "DAYS", waitTime: s.waitTime ?? "" }))}
         knownTags={tags.map((t) => t.name)}
+        stats={stats}
+        tracking={tracking}
         testEmail={admin.email}
       />
 

@@ -87,10 +87,54 @@ export function textToHtml(text: string): string {
     .join("");
 }
 
-function sign(leadId: string): string {
+function secret(): string {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 32) throw new Error("SESSION_SECRET fehlt oder ist kürzer als 32 Zeichen");
-  return createHmac("sha256", secret).update(`unsubscribe:${leadId}`).digest("hex");
+  return secret;
+}
+
+function sign(leadId: string): string {
+  return createHmac("sha256", secret()).update(`unsubscribe:${leadId}`).digest("hex");
+}
+
+function safeEqualHex(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+/** Signatur für Tracking-Links („open“ oder „click“, optional mit Ziel-URL), damit niemand fremde Links oder Zähler fälschen kann. */
+export function trackToken(purpose: "open" | "click", sendId: string, extra = ""): string {
+  return createHmac("sha256", secret()).update(`${purpose}:${sendId}:${extra}`).digest("hex").slice(0, 32);
+}
+
+export function verifyTrack(purpose: "open" | "click", sendId: string, extra: string, token: string): boolean {
+  try {
+    return safeEqualHex(trackToken(purpose, sendId, extra), token);
+  } catch {
+    return false;
+  }
+}
+
+export function encodeUrl(url: string): string {
+  return Buffer.from(url, "utf8").toString("base64url");
+}
+
+export function decodeUrl(value: string): string | null {
+  try {
+    const url = Buffer.from(value, "base64url").toString("utf8");
+    return /^https?:\/\//i.test(url) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Schreibt alle http(s)-Links in `href="…"` um; Links, für die `skip` true liefert (z. B. Abmelden), bleiben unberührt. */
+export function rewriteLinks(html: string, wrap: (url: string) => string, skip: (url: string) => boolean = () => false): string {
+  return html.replace(/href="(https?:\/\/[^"]+)"/g, (m, url: string) => {
+    const plain = url.replace(/&amp;/g, "&");
+    return skip(plain) ? m : `href="${wrap(plain)}"`;
+  });
 }
 
 /** Geheimer Teil des Abmelde-Links eines Leads. */
@@ -100,9 +144,7 @@ export function unsubscribeToken(leadId: string): string {
 
 export function verifyUnsubscribe(leadId: string, token: string): boolean {
   try {
-    const a = Buffer.from(sign(leadId));
-    const b = Buffer.from(token);
-    return a.length === b.length && timingSafeEqual(a, b);
+    return safeEqualHex(sign(leadId), token);
   } catch {
     return false;
   }

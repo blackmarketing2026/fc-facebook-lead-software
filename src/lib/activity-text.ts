@@ -20,6 +20,10 @@ export function activityText(type: ActivityType, meta: unknown, users: Map<strin
       return `Tag entfernt: ${(m.tag as string) ?? "?"}`;
     case "EMAIL_SENT":
       return `E-Mail verschickt: „${(m.subject as string) ?? "?"}“${m.chain ? ` (Kette ${m.chain as string})` : ""}`;
+    case "EMAIL_BOUNCED":
+      return `E-Mail nicht zustellbar${m.subject ? `: „${m.subject as string}“` : ""}${m.reason ? ` (${m.reason as string})` : ""}`;
+    case "EMAIL_COMPLAINT":
+      return `Hat die E-Mail${m.subject ? ` „${m.subject as string}“` : ""} als Spam gemeldet – automatisch abgemeldet`;
     case "UNSUBSCRIBED":
       return m.via === "link" ? "Hat sich über den Abmelde-Link abgemeldet" : "Vom E-Mail-Verteiler abgemeldet";
     default:
