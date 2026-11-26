@@ -5,6 +5,7 @@ import { formatDateTime, formatTime } from "@/lib/format";
 import { REMINDER_LEAD_MINUTES, reminderIcon, reminderLabel } from "@/lib/reminder-types";
 import { getCurrentUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
+import { processChains } from "@/lib/chains";
 import { checkReminders } from "@/worker/reminders";
 
 /** Neue Leads erscheinen so lange in der Glocke, bis sie bearbeitet sind – höchstens aber 7 Tage. */
@@ -21,6 +22,7 @@ export async function GET() {
   if (Date.now() - lastReminderCheck > 60_000) {
     lastReminderCheck = Date.now();
     after(() => checkReminders().catch((err) => console.error("[reminders]", err)));
+    after(() => processChains().catch((err) => console.error("[chains]", err)));
   }
 
   const now = new Date();

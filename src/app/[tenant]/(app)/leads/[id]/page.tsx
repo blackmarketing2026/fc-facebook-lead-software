@@ -10,6 +10,7 @@ import { isContactKey } from "@/lib/lead-parser";
 import { reminderEvent } from "@/lib/reminder-calendar";
 import { formatDuration, reminderIcon, reminderLabel } from "@/lib/reminder-types";
 import { requireUser } from "@/lib/session";
+import { LeadTags } from "./lead-tags";
 import { tenantPath } from "@/lib/tenant-paths";
 import {
   ContactButtons,
@@ -55,6 +56,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
         tenant: { select: { id: true, name: true, slug: true } },
         assignedTo: { select: { id: true, displayName: true } },
         stage: { select: { name: true } },
+        tags: { include: { tag: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
         answers: { orderBy: { position: "asc" } },
         notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { displayName: true } } } },
         reminders: { orderBy: [{ done: "asc" }, { dueAt: "asc" }], include: { user: { select: { displayName: true } } } },
@@ -62,6 +64,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
       },
     });
   const stages = await db.pipelineStage.findMany({ where: { tenantId: lead.tenantId }, orderBy: { position: "asc" }, select: { id: true, name: true } });
+  const knownTags = await db.tag.findMany({ where: { tenantId: lead.tenantId }, orderBy: { name: "asc" }, select: { name: true } });
   const userNames = new Map<string, string>();
   if (lead.assignedTo) userNames.set(lead.assignedTo.id, lead.assignedTo.displayName);
 
@@ -116,6 +119,8 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           />
         </div>
       </section>
+
+      <LeadTags leadId={lead.id} tags={lead.tags.map((t) => t.tag)} knownTags={knownTags.map((t) => t.name)} optOut={lead.emailOptOut} hasEmail={Boolean(lead.email)} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="order-2 space-y-6 lg:order-1 lg:col-span-2">

@@ -4,6 +4,7 @@ import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
 import { intakeRejection } from "./lead-intake";
 import { parseLeadText } from "./lead-parser";
 import { sendAssigneeLeadMail, sendLeadNotificationMail, sendMasterLeadMail } from "./lead-notify-mail";
+import { autoTagNewLead } from "./chains";
 import { sendPushToUser } from "./push";
 
 export type InboundMail = {
@@ -144,6 +145,8 @@ async function createLead(
 }
 
 async function notifyNewLead(tenantId: string, leadId: string, name: string | null, userId: string | null) {
+  // Neuer Lead bekommt den Auto-Tag und startet damit die passende E-Mail-Kette.
+  await autoTagNewLead(tenantId, leadId).catch((err) => console.error("[chains]", err));
   const masterEmail = await sendMasterLeadMail(leadId).catch((err) => {
     console.error("[mail:master]", err);
     return null;

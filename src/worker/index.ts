@@ -1,3 +1,4 @@
+import { processChains } from "../lib/chains";
 import { checkReminders } from "./reminders";
 import { imapConfigured } from "../lib/imap-settings";
 import { pollMailbox } from "../lib/mailbox";
@@ -27,3 +28,4 @@ console.log("[worker] gestartet");
 void imapConfigured().then((ok) => ok || console.warn("[worker] IMAP-Zugang fehlt (Platzhalter) – Postfach-Abruf läuft im Leerlauf"));
 every("imap", IMAP_INTERVAL, pollMailbox);
 every("reminders", REMINDER_INTERVAL, checkReminders);
+every("chains", REMINDER_INTERVAL, processChains);
