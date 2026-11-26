@@ -4,7 +4,7 @@ import { parseBerlinLocal } from "./format";
 import { STATUSES } from "./labels";
 import type { CurrentUser } from "./session";
 
-export type LeadListFilters = { q: string; status: LeadStatus | ""; assignee: string; from: string; to: string };
+export type LeadListFilters = { q: string; status: LeadStatus | ""; from: string; to: string };
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -16,7 +16,6 @@ export function leadListFilters(sp: Params): LeadListFilters {
   return {
     q: str(sp.q).trim(),
     status: str(sp.status) as LeadStatus | "",
-    assignee: str(sp.assignee),
     from: str(sp.from),
     to: str(sp.to),
   };
@@ -26,7 +25,6 @@ export function leadListFilters(sp: Params): LeadListFilters {
 export function leadListWhere(user: CurrentUser, f: LeadListFilters): Prisma.LeadWhereInput {
   const where: Prisma.LeadWhereInput = { ...leadScope(user) };
   if (f.status && STATUSES.includes(f.status)) where.status = f.status;
-  if (user.role === "ADMIN" && f.assignee) where.assignedToId = f.assignee === "none" ? null : f.assignee;
   if (f.from || f.to) {
     where.receivedAt = {
       ...(f.from ? { gte: parseBerlinLocal(`${f.from}T00:00`) } : {}),

@@ -1,172 +1,38 @@
 "use client";
 
 import type { LeadStatus, ReminderType } from "@prisma/client";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   addNote,
-  closeLead,
   completeReminder,
   createReminder,
   deleteReminder,
-  reassignLead,
   trackContact,
-  transferLead,
   updateStatus,
   type FormState,
 } from "@/app/actions/leads";
-import { formatEuro } from "@/lib/commission";
 import { STATUS_LABELS } from "@/lib/labels";
 import { DURATION_OPTIONS, formatDuration, REMINDER_LEAD_MINUTES, REMINDER_TYPE_KEYS, REMINDER_TYPES } from "@/lib/reminder-types";
 
-/** Status-Auswahl; "Abgeschlossen" fragt die Provisionseinnahme ab (Pflicht). */
-export function StatusSelect({ leadId, status, commission, statuses }: { leadId: string; status: LeadStatus; commission: number | null; statuses: LeadStatus[] }) {
-  const [pending, start] = useTransition();
-  const [closing, setClosing] = useState(false);
-  const [amount, setAmount] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  function openCommission() {
-    setAmount(commission === null ? "" : commission.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    setError(null);
-    setClosing(true);
-  }
-
-  function saveCommission(e: React.FormEvent) {
-    e.preventDefault();
-    start(async () => {
-      const result = await closeLead(leadId, amount);
-      if (result.error) setError(result.error);
-      else setClosing(false);
-    });
-  }
-
-  return (
-    <div className="flex flex-col items-start gap-2 sm:items-end">
-      <select
-        className="input w-auto"
-        value={closing ? "ABGESCHLOSSEN" : status}
-        disabled={pending}
-        onChange={(e) => {
-          const next = e.target.value as LeadStatus;
-          if (next === "ABGESCHLOSSEN") return openCommission();
-          setClosing(false);
-          start(() => updateStatus(leadId, next));
-        }}
-        aria-label="Status"
-      >
-        {statuses.map((s) => (
-          <option key={s} value={s}>
-            {STATUS_LABELS[s]}
-          </option>
-        ))}
-      </select>
-      {status === "ABGESCHLOSSEN" && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-500">Provision:</span>
-          <span className="font-medium">{commission === null ? "nicht eingetragen" : formatEuro(commission)}</span>
-          <button type="button" className="text-blue-700 hover:underline" onClick={openCommission}>
-            {commission === null ? "eintragen" : "ändern"}
-          </button>
-        </div>
-      )}
-      {closing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <form
-            onSubmit={saveCommission}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`commission-title-${leadId}`}
-            className="card w-full max-w-sm p-6 text-left shadow-xl"
-          >
-            <div className="mb-1 text-3xl">🎉</div>
-            <h2 id={`commission-title-${leadId}`} className="text-lg font-semibold">
-              {status === "ABGESCHLOSSEN" ? "Provision ändern" : "Abschluss – bitte die Einnahme eingeben"}
-            </h2>
-            <p className="mb-4 text-sm text-slate-500">Wie hoch ist die Provisionseinnahme für diesen Lead?</p>
-            <label className="block">
-              <span className="label">Provision in €</span>
-              <input
-                className="input text-lg"
-                inputMode="decimal"
-                placeholder="1.500,00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-                autoFocus
-              />
-            </label>
-            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" className="btn-secondary" onClick={() => setClosing(false)} disabled={pending}>
-                Abbrechen
-              </button>
-              <button disabled={pending} className="btn-primary">
-                {pending ? "Speichern …" : status === "ABGESCHLOSSEN" ? "Speichern" : "Abschluss speichern"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function ReassignSelect({
-  leadId,
-  assignedToId,
-  users,
-}: {
-  leadId: string;
-  assignedToId: string | null;
-  users: { id: string; displayName: string }[];
-}) {
+/** Status-Auswahl. */
+export function StatusSelect({ leadId, status, statuses }: { leadId: string; status: LeadStatus; statuses: LeadStatus[] }) {
   const [pending, start] = useTransition();
   return (
     <select
       className="input w-auto"
-      value={assignedToId ?? ""}
+      value={status}
       disabled={pending}
-      onChange={(e) => e.target.value && start(() => reassignLead(leadId, e.target.value))}
-      aria-label="Zugewiesen an"
+      onChange={(e) => start(() => updateStatus(leadId, e.target.value as LeadStatus))}
+      aria-label="Status"
     >
-      {!assignedToId && <option value="">Nicht zugewiesen</option>}
-      {users.map((u) => (
-        <option key={u.id} value={u.id}>
-          {u.displayName}
+      {statuses.map((s) => (
+        <option key={s} value={s}>
+          {STATUS_LABELS[s]}
         </option>
       ))}
     </select>
   );
-}
-
-export function TransferLeadControls({ leadId, currentOwnerId, users, isAdmin }: { leadId: string; currentOwnerId: string; users: { id: string; displayName: string }[]; isAdmin: boolean }) {
-  const router = useRouter();
-  const { tenant } = useParams<{ tenant: string }>();
-  const [target, setTarget] = useState("");
-  const [error, setError] = useState("");
-  const [pending, start] = useTransition();
-  const colleagues = users.filter((item) => item.id !== currentOwnerId);
-
-  function submit() {
-    if (!target) return setError("Bitte einen Mitarbeiter oder den Pool auswählen.");
-    if (target === "pool" && !window.confirm("Lead in den freien Pool legen? Offene Termine für diesen Lead werden entfernt.")) return;
-    setError("");
-    start(async () => {
-      const result = await transferLead(leadId, target === "pool" ? null : target);
-      if (result.error) return setError(result.error);
-      if (isAdmin) router.refresh();
-      else router.push(`/${tenant}/leads`);
-    });
-  }
-
-  return <div className="w-full rounded-xl border border-[var(--line)] bg-[var(--accent-soft)] p-3 text-left sm:w-80">
-    <label htmlFor={`transfer-${leadId}`} className="label">Lead übergeben</label>
-    <p className="mb-2 text-xs text-slate-600">An einen Kollegen geben oder in den freien Pool legen.</p>
-    <select id={`transfer-${leadId}`} value={target} onChange={(event) => setTarget(event.target.value)} className="input mb-2"><option value="">Bitte auswählen …</option>{colleagues.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}<option value="pool">Zurück in den Pool</option></select>
-    <button type="button" disabled={pending} onClick={submit} className="btn-primary w-full">{pending ? "Übergabe läuft …" : "Lead übergeben"}</button>
-    {error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}
-  </div>;
 }
 
 type ContactProps = {

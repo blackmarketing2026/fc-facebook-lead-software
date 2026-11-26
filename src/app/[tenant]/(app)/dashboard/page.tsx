@@ -144,50 +144,26 @@ export default async function DashboardPage() {
 
 async function AdminStats({ tenantId, slug, todayStart }: { tenantId: string; slug: string; todayStart: Date }) {
   const weekStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000);
-  const [salesUsers, today, week, byStatus, unassigned, latest] = await Promise.all([
-    db.user.findMany({ where: { tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] }, orderBy: { distOrder: "asc" }, select: { id: true, displayName: true, active: true, distPaused: true } }),
-    db.lead.groupBy({ by: ["assignedToId"], where: { tenantId, receivedAt: { gte: todayStart } }, _count: true }),
-    db.lead.groupBy({ by: ["assignedToId"], where: { tenantId, receivedAt: { gte: weekStart } }, _count: true }),
+  const [today, week, byStatus, latest] = await Promise.all([
+    db.lead.count({ where: { tenantId, receivedAt: { gte: todayStart } } }),
+    db.lead.count({ where: { tenantId, receivedAt: { gte: weekStart } } }),
     db.lead.groupBy({ by: ["status"], where: { tenantId }, _count: true }),
-    db.lead.count({ where: { tenantId, assignedToId: null } }),
     db.lead.findMany({
       where: { tenantId },
       orderBy: { receivedAt: "desc" },
       take: 8,
-      include: { assignedTo: { select: { displayName: true } } },
     }),
   ]);
-  const countFor = (rows: { assignedToId: string | null; _count: number }[], id: string) =>
-    rows.find((r) => r.assignedToId === id)?._count ?? 0;
-
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <section className="card p-5 lg:col-span-1">
-        <h2 className="mb-3 font-semibold">Leads pro Vertriebler</h2>
+        <h2 className="mb-3 font-semibold">Neue Leads</h2>
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-slate-500">
-            <tr>
-              <th className="pb-2">Name</th>
-              <th className="pb-2 text-right">Heute</th>
-              <th className="pb-2 text-right">7 Tage</th>
-            </tr>
-          </thead>
           <tbody className="divide-y divide-slate-100">
-            {salesUsers.map((u) => (
-              <tr key={u.id}>
-                <td className="py-2">
-                  {u.displayName}
-                  {(!u.active || u.distPaused) && <span className="ml-1 text-xs text-slate-400">(pausiert)</span>}
-                </td>
-                <td className="py-2 text-right tabular-nums">{countFor(today, u.id)}</td>
-                <td className="py-2 text-right tabular-nums">{countFor(week, u.id)}</td>
-              </tr>
-            ))}
+            <tr><td className="py-2">Heute</td><td className="py-2 text-right tabular-nums">{today}</td></tr>
+            <tr><td className="py-2">Letzte 7 Tage</td><td className="py-2 text-right tabular-nums">{week}</td></tr>
           </tbody>
         </table>
-        {unassigned > 0 && (
-          <p className="mt-3 text-sm text-amber-700">⚠️ {unassigned} Lead(s) ohne Zuweisung</p>
-        )}
       </section>
 
       <section className="card p-5">
@@ -216,7 +192,7 @@ async function AdminStats({ tenantId, slug, todayStart }: { tenantId: string; sl
                 <StatusBadge status={l.status} />
               </div>
               <div className="text-xs text-slate-500">
-                {formatDateTime(l.receivedAt)} · {l.assignedTo?.displayName ?? "nicht zugewiesen"}
+                {formatDateTime(l.receivedAt)}
               </div>
             </li>
           ))}

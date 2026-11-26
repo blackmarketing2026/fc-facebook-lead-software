@@ -16,7 +16,7 @@ npm run dev                  # Terminal 2: http://localhost:3000/function-concep
 npm run worker               # Terminal 3: Postfach-Abruf + Rückruf-Erinnerungen
 ```
 
-Startzugang (lokal, änderbar in `.env` vor dem Seed): `admin` / `admin12345`. Anmelden geht mit Benutzername oder E-Mail-Adresse.
+Startzugang (lokal, änderbar in `.env` vor dem Seed): `admin` / `admin12345`. Anmelden geht mit Benutzername oder E-Mail-Adresse. Mitglieder, Abschlüsse, Verteilung und Protokoll gibt es nicht mehr.
 
 **Master-Account:** `account@function-concept.de` (Hauptaccount, id `user_master_account`). Das aktuelle Passwort setzt die Migration `20261126120000_single_tenant_cleanup`; nach dem ersten Login unter **Mitglieder** ändern. Der Master erhält zusätzlich zu jedem neuen Lead eine ausführliche E-Mail.
 

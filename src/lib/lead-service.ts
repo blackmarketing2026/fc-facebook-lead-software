@@ -1,6 +1,5 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
-import { assignNextSalesUser } from "./distribution";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
 import { parseLeadText } from "./lead-parser";
 import { sendAssigneeLeadMail, sendLeadNotificationMail, sendMasterLeadMail } from "./lead-notify-mail";
@@ -109,7 +108,8 @@ async function createLead(
   sourceEmailId: string | null,
   receivedAt?: Date,
 ) {
-  const assignedToId = await assignNextSalesUser(tx, tenantId);
+  // Leads werden nicht mehr automatisch verteilt.
+  const assignedToId: string | null = null;
   const lead = await tx.lead.create({
     data: {
       tenantId,

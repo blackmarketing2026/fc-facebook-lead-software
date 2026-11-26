@@ -18,15 +18,10 @@ export default async function AppLayout({ children }: LayoutProps<"/[tenant]">) 
     { href: t("/dashboard"), label: "Start", icon: "home" },
     { href: t("/leads"), label: "Leads", icon: "leads" },
     { href: t("/calendar"), label: "Kalender", icon: "calendar" },
-    { href: t("/closings"), label: "Abschlüsse", icon: "chart" },
   ];
   const secondary: AppLink[] = user.role === "ADMIN" ? [
-    { href: t("/settings/users"), label: "Mitglieder", icon: "users" },
-    { href: t("/settings/distribution"), label: "Verteilung", icon: "sliders" },
-    { href: t("/settings/distribution-test"), label: "Verteilungstest", icon: "sliders" },
     { href: t("/settings/mailbox"), label: "Postfach", icon: "mail" },
     { href: t("/settings/notifications"), label: "Benachrichtigungen", icon: "settings" },
-    { href: t("/log"), label: "Protokoll", icon: "settings" },
   ] : [];
 
   return <div className="app-shell app-shell--master">

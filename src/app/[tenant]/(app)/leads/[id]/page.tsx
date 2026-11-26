@@ -4,7 +4,6 @@ import { ResetLeadButton } from "@/components/reset-lead-button";
 import { StatusBadge } from "@/components/status-badge";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
-import { formatEuro } from "@/lib/commission";
 import { formatDateTime, telHref, TIMEZONE, whatsappNumber } from "@/lib/format";
 import { ACTIVITY_LABELS, STATUS_LABELS, STATUSES } from "@/lib/labels";
 import { googleCalendarUrl } from "@/lib/ics";
@@ -16,11 +15,9 @@ import { tenantPath } from "@/lib/tenant-paths";
 import {
   ContactButtons,
   NoteForm,
-  ReassignSelect,
   ReminderActions,
   ReminderForm,
   StatusSelect,
-  TransferLeadControls,
 } from "./lead-controls";
 
 export const metadata = { title: "Lead" };
@@ -36,9 +33,7 @@ function activityText(type: ActivityType, meta: unknown, users: Map<string, stri
   const m = (meta ?? {}) as Record<string, unknown>;
   switch (type) {
     case "STATUS_CHANGED": {
-      const provision = typeof m.commission === "number" ? ` · Provision ${formatEuro(m.commission)}` : "";
-      if (m.from === m.to) return `Provision geändert auf ${typeof m.commission === "number" ? formatEuro(m.commission) : "?"}`;
-      return `Status: ${STATUS_LABELS[m.from as LeadStatus] ?? m.from} → ${STATUS_LABELS[m.to as LeadStatus] ?? m.to}${m.auto ? " (automatisch)" : ""}${provision}`;
+      return `Status: ${STATUS_LABELS[m.from as LeadStatus] ?? m.from} → ${STATUS_LABELS[m.to as LeadStatus] ?? m.to}${m.auto ? " (automatisch)" : ""}`;
     }
     case "ASSIGNED":
       if (m.pool) return "Zurück in den freien Pool gegeben";
@@ -66,13 +61,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
         activities: { orderBy: { createdAt: "desc" }, include: { user: { select: { displayName: true } } } },
       },
     });
-  // Vertriebler des Dashboards, zu dem der Lead gehört (im Hauptaccount nicht zwingend das eigene).
-  const salesUsers = await db.user.findMany({
-    where: { tenantId: lead.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }], active: true },
-    orderBy: { distOrder: "asc" },
-    select: { id: true, displayName: true, distPaused: true, absenceReason: true },
-  });
-  const userNames = new Map(salesUsers.map((u) => [u.id, u.displayName]));
+  const userNames = new Map<string, string>();
   if (lead.assignedTo) userNames.set(lead.assignedTo.id, lead.assignedTo.displayName);
 
   const firstName = lead.fullName?.split(" ")[0] ?? "";
@@ -91,7 +80,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
       </div>
 
       <section className="card p-5">
-        {user.role === "ADMIN" && <div className="mb-4"><ResetLeadButton leadId={lead.id} /><p className="mt-1 text-xs text-slate-500">Löscht die gesamte Bearbeitungshistorie. Anschließend kannst du den Lead oben neu zuweisen.</p></div>}
+        {user.role === "ADMIN" && <div className="mb-4"><ResetLeadButton leadId={lead.id} /><p className="mt-1 text-xs text-slate-500">Löscht die gesamte Bearbeitungshistorie.</p></div>}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">{lead.fullName || "Unbekannt"}</h1>
@@ -107,16 +96,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-slate-500">Status</span>
-              <StatusSelect leadId={lead.id} status={lead.status} commission={lead.commission?.toNumber() ?? null} statuses={STATUSES} />
-            </div>
-            {lead.assignedToId && (user.role === "ADMIN" || lead.assignedToId === user.id) && <TransferLeadControls leadId={lead.id} currentOwnerId={lead.assignedToId} users={salesUsers.filter((member) => !member.distPaused && !member.absenceReason)} isAdmin={user.role === "ADMIN"} />}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-slate-500">Vertriebler</span>
-              {user.role === "ADMIN" ? (
-                <ReassignSelect leadId={lead.id} assignedToId={lead.assignedToId} users={salesUsers} />
-              ) : (
-                <span className="text-sm font-medium">{lead.assignedTo?.displayName}</span>
-              )}
+              <StatusSelect leadId={lead.id} status={lead.status} statuses={STATUSES} />
             </div>
           </div>
         </div>
