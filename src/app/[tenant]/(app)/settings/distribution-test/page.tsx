@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { seesAllTenants, tenantFilter } from "@/lib/access";
+import { tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
 import { previewSequence } from "@/lib/distribution";
 import { formatDateTime } from "@/lib/format";
@@ -13,13 +13,12 @@ export const metadata = { title: "Verteilungstest" };
 export default async function DistributionTestPage() {
   const admin = await requireAdmin();
   const scope = tenantFilter(admin);
-  const allTenants = seesAllTenants(admin);
   const [leads, sales] = await Promise.all([
     db.lead.findMany({
       where: scope,
       orderBy: { receivedAt: "desc" },
       take: 100,
-      select: { id: true, tenantId: true, fullName: true, receivedAt: true, assignedTo: { select: { displayName: true } }, tenant: { select: { name: true } } },
+      select: { id: true, tenantId: true, fullName: true, receivedAt: true, assignedTo: { select: { displayName: true } } },
     }),
     db.user.findMany({
       where: { ...scope, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] },
@@ -27,7 +26,6 @@ export default async function DistributionTestPage() {
       select: {
         id: true,
         tenantId: true,
-        tenant: { select: { name: true } },
         displayName: true,
         email: true,
         active: true,
@@ -80,7 +78,7 @@ export default async function DistributionTestPage() {
             leads={leads.map((l) => ({
               id: l.id,
               tenantId: l.tenantId,
-              label: `${allTenants ? `${l.tenant.name} · ` : ""}${l.fullName ?? "Unbekannt"} · ${formatDateTime(l.receivedAt)} · ${l.assignedTo?.displayName ?? "nicht zugewiesen"}`,
+              label: `${l.fullName ?? "Unbekannt"} · ${formatDateTime(l.receivedAt)} · ${l.assignedTo?.displayName ?? "nicht zugewiesen"}`,
             }))}
             sales={inRotation.map((u) => ({ id: u.id, tenantId: u.tenantId, name: u.displayName }))}
             nextByTenant={Object.fromEntries([...nextIds].map(([tid, id]) => [tid, nameOf(id)]))}
@@ -93,7 +91,6 @@ export default async function DistributionTestPage() {
         <table className="mt-3 min-w-full text-sm">
           <thead className="border-y border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              {allTenants && <th className="px-4 py-3">Plattform</th>}
               <th className="px-4 py-3">Vertriebler</th>
               <th className="px-4 py-3">E-Mail</th>
               <th className="px-4 py-3">In der Verteilung</th>
@@ -103,14 +100,13 @@ export default async function DistributionTestPage() {
           <tbody className="divide-y divide-slate-100">
             {sales.length === 0 && (
               <tr>
-                <td colSpan={allTenants ? 5 : 4} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
                   Noch keine Vertriebler angelegt.
                 </td>
               </tr>
             )}
             {sales.map((u) => (
               <tr key={u.id}>
-                {allTenants && <td className="whitespace-nowrap px-4 py-3 text-slate-600">{u.tenant.name}</td>}
                 <td className="px-4 py-3 font-medium">
                   {u.displayName}
                   {nextIds.get(u.tenantId) === u.id && <span className="badge ml-2 bg-blue-100 text-blue-800">als Nächstes dran</span>}
@@ -129,7 +125,7 @@ export default async function DistributionTestPage() {
                   {u.notifyNewLeadEmail ? (
                     <span className="text-green-700">✓ an</span>
                   ) : (
-                    <Link href={tenantPath(admin.tenant.slug, allTenants ? "/platform/members" : "/settings/users")} className="text-amber-700 underline">
+                    <Link href={tenantPath(admin.tenant.slug, "/settings/users")} className="text-amber-700 underline">
                       aus – unter Mitglieder einschalten
                     </Link>
                   )}

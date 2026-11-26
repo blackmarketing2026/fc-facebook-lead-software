@@ -16,10 +16,10 @@ export async function GET(_request: Request, ctx: RouteContext<"/[tenant]/api/ca
 
   const user = await db.user.findUnique({
     where: { calendarToken: cleanToken },
-    select: { id: true, active: true, displayName: true, tenant: { select: { slug: true, name: true, status: true } } },
+    select: { id: true, active: true, displayName: true, tenant: { select: { slug: true, name: true } } },
   });
   // Der Token allein identifiziert den Benutzer; Links zeigen immer auf sein eigenes Dashboard.
-  if (!user || !user.active || user.tenant.status !== "ACTIVE") {
+  if (!user || !user.active) {
     return new Response("Nicht gefunden", { status: 404 });
   }
 

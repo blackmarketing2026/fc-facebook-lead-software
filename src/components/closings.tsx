@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { leadScope, seesAllTenants } from "@/lib/access";
+import { leadScope } from "@/lib/access";
 import { formatEuro, parsePeriod, recentPeriods, type Period, type PeriodKind } from "@/lib/commission";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
@@ -33,7 +33,6 @@ export async function Closings({ user, filter, path }: { user: CurrentUser; filt
   // Ältere Zeiträume aus einem Link trotzdem in der Auswahl zeigen.
   if (period && !options.some((o) => o.key === period.key)) options.push(period);
 
-  const allTenants = seesAllTenants(user);
   const scope = { ...leadScope(user), status: "ABGESCHLOSSEN" as const, closedAt: { not: null } };
   const [closings, overall] = await Promise.all([
     db.lead.findMany({
@@ -164,7 +163,6 @@ export async function Closings({ user, filter, path }: { user: CurrentUser; filt
                 <tr>
                   <th className="py-2 pr-4">Datum</th>
                   <th className="py-2 pr-4">Lead</th>
-                  {allTenants && <th className="py-2 pr-4">Dashboard</th>}
                   {isAdmin && <th className="py-2 pr-4">Mitglied</th>}
                   <th className="py-2 text-right">Provision</th>
                 </tr>
@@ -178,7 +176,6 @@ export async function Closings({ user, filter, path }: { user: CurrentUser; filt
                         {r.fullName ?? "Unbekannt"}
                       </Link>
                     </td>
-                    {allTenants && <td className="py-2 pr-4 text-slate-600">{r.tenant.name}</td>}
                     {isAdmin && <td className="py-2 pr-4">{r.assignedTo?.displayName ?? "–"}</td>}
                     <td className="py-2 text-right tabular-nums">
                       {r.amount === null ? <span className="text-amber-700">fehlt</span> : formatEuro(r.amount)}

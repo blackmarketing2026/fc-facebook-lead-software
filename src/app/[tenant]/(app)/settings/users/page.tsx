@@ -3,7 +3,6 @@ import { requireAdmin } from "@/lib/session";
 import { deleteUser } from "@/app/actions/settings";
 import { Closings } from "@/components/closings";
 import { RemoveMemberButton } from "@/components/remove-member-button";
-import { LoginLink } from "@/app/[tenant]/(app)/platform/login-link";
 import { CreateUserForm, EditUserForm } from "./user-forms";
 
 export const metadata = { title: "Mitglieder" };
@@ -14,7 +13,7 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
   const users = await db.user.findMany({
     where: { tenantId: admin.tenantId },
     orderBy: [{ role: "asc" }, { distOrder: "asc" }],
-    select: { id: true, email: true, displayName: true, role: true, active: true, salesEnabled: true, notifyNewLeadEmail: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } },
+    select: { id: true, email: true, displayName: true, role: true, active: true, salesEnabled: true, notifyNewLeadEmail: true, isPlatformAdmin: true },
   });
 
   return (
@@ -22,17 +21,12 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
       <div>
         <h1 className="text-2xl font-semibold">Mitglieder</h1>
         <p className="text-sm text-slate-500">
-          Vertriebler und Admins mit Zugang zu diesem Dashboard. Vertriebler sehen nur ihre eigenen Leads.{" "}
+          Vertriebler und Admins mit Zugang zu dieser Anwendung. Vertriebler sehen nur ihre eigenen Leads.{" "}
           <a href="#abschluesse" className="text-blue-700 hover:underline">
             Zu Abschlüssen und Einnahmen ↓
           </a>
         </p>
       </div>
-
-      <section className="card space-y-3 p-4">
-        <div><h2 className="font-semibold">Login-URL für Mitglieder</h2><p className="text-sm text-slate-500">Diesen Link können alle Mitglieder dieser Plattform zum Anmelden nutzen.</p></div>
-        <LoginLink slug={admin.tenant.slug} showUrl />
-      </section>
 
       <div className="space-y-3">
         {users.map((u) => (
@@ -43,14 +37,14 @@ export default async function UsersPage(props: PageProps<"/[tenant]/settings/use
                 {u.role === "ADMIN" ? "Admin" : "Vertrieb"}
               </span>
               {!u.active && <span className="badge bg-red-100 text-red-700">deaktiviert</span>}
-              {u.platformGrants.length > 0 && <span className="badge bg-blue-100 text-blue-800">Stufe 2</span>}
+              {u.isPlatformAdmin && <span className="badge bg-amber-100 text-amber-800">Master</span>}
               {u.salesEnabled && <span className="badge bg-blue-100 text-blue-800">Auch Vertrieb</span>}
               <span className="ml-auto text-sm text-slate-500">{u.email}</span>
               <span className="text-slate-400 transition group-open:rotate-180">▾</span>
             </summary>
             <div className="border-t border-slate-100 p-4">
-              {(admin.isPlatformAdmin || (!u.isPlatformAdmin && u.platformGrants.length === 0)) ? <EditUserForm user={u} isSelf={u.id === admin.id} /> : <p className="text-sm text-slate-500">Dieses Mitglied wird vom Master-Admin verwaltet.</p>}
-              {u.id !== admin.id && !u.isPlatformAdmin && (admin.isPlatformAdmin || u.platformGrants.length === 0) && (
+              {(admin.isPlatformAdmin || !u.isPlatformAdmin) ? <EditUserForm user={u} isSelf={u.id === admin.id} /> : <p className="text-sm text-slate-500">Der Master-Account wird nur vom Master selbst verwaltet.</p>}
+              {u.id !== admin.id && !u.isPlatformAdmin && (
                 <div className="mt-4 border-t border-slate-100 pt-4">
                   <RemoveMemberButton action={deleteUser.bind(null, u.id)} name={u.displayName} />
                 </div>

@@ -8,7 +8,7 @@ export const PLATFORM_TENANT_SLUG = "function-concept";
 export const TENANT_HEADER = "x-tenant-slug";
 
 /** Kürzel, die als erste Pfad-Ebene schon belegt sind und kein Mandant sein dürfen. */
-export const RESERVED_SLUGS = new Set(["api", "_next", "login", "platform", "settings", "static", "public", "favicon.ico", "sw.js"]);
+export const RESERVED_SLUGS = new Set(["api", "_next", "login", "settings", "static", "public", "favicon.ico", "sw.js"]);
 
 export function isValidSlug(slug: string): boolean {
   return /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(slug) && !RESERVED_SLUGS.has(slug);

@@ -6,7 +6,7 @@ import { getAccessibleLeadOr404 } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatEuro } from "@/lib/commission";
 import { formatDateTime, telHref, TIMEZONE, whatsappNumber } from "@/lib/format";
-import { ACTIVITY_LABELS, STATUS_LABELS, statusesForTenant } from "@/lib/labels";
+import { ACTIVITY_LABELS, STATUS_LABELS, STATUSES } from "@/lib/labels";
 import { googleCalendarUrl } from "@/lib/ics";
 import { isContactKey } from "@/lib/lead-parser";
 import { reminderEvent } from "@/lib/reminder-calendar";
@@ -58,7 +58,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
   const lead = await db.lead.findUniqueOrThrow({
       where: { id },
       include: {
-        tenant: { select: { id: true, name: true, code: true, slug: true } },
+        tenant: { select: { id: true, name: true, slug: true } },
         assignedTo: { select: { id: true, displayName: true } },
         answers: { orderBy: { position: "asc" } },
         notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { displayName: true } } } },
@@ -72,7 +72,6 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
     orderBy: { distOrder: "asc" },
     select: { id: true, displayName: true, distPaused: true, absenceReason: true },
   });
-  const foreignTenant = lead.tenantId !== user.tenantId;
   const userNames = new Map(salesUsers.map((u) => [u.id, u.displayName]));
   if (lead.assignedTo) userNames.set(lead.assignedTo.id, lead.assignedTo.displayName);
 
@@ -97,11 +96,6 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           <div>
             <h1 className="text-2xl font-semibold">{lead.fullName || "Unbekannt"}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              {foreignTenant && (
-                <span className="badge mr-2 bg-slate-900 text-white">
-                  {lead.tenant.code} · {lead.tenant.name}
-                </span>
-              )}
               Eingegangen am {formatDateTime(lead.receivedAt)}
               {lead.language && ` · Sprache: ${lead.language}`}
             </p>
@@ -113,7 +107,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-slate-500">Status</span>
-              <StatusSelect leadId={lead.id} status={lead.status} commission={lead.commission?.toNumber() ?? null} statuses={statusesForTenant(lead.tenant.slug)} />
+              <StatusSelect leadId={lead.id} status={lead.status} commission={lead.commission?.toNumber() ?? null} statuses={STATUSES} />
             </div>
             {lead.assignedToId && (user.role === "ADMIN" || lead.assignedToId === user.id) && <TransferLeadControls leadId={lead.id} currentOwnerId={lead.assignedToId} users={salesUsers.filter((member) => !member.distPaused && !member.absenceReason)} isAdmin={user.role === "ADMIN"} />}
             <div className="flex flex-wrap items-center gap-2">

@@ -17,7 +17,6 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   // Benutzer gelten pro Dashboard: angemeldet wird im Mandanten aus dem Pfad (/<slug>/login).
   const tenant = await getTenant();
   if (!tenant) return { error: "Unbekanntes Dashboard." };
-  if (tenant.status === "SUSPENDED") redirect(tenantPath(tenant.slug, "/suspended"));
 
   // Anmeldung mit E-Mail; Benutzernamen aus der Zeit vor der Umstellung funktionieren weiterhin.
   const user = login.includes("@")

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildMasterLeadMail } from "@/lib/lead-notify-mail";
 
-const tenant = { slug: "engel", name: "Engel" };
+const tenant = { slug: "function-concept", name: "Function Concept" };
 const lead = {
   id: "lead-123",
   fullName: "Max Mustermann",
@@ -23,7 +23,7 @@ describe("Master-Lead-E-Mail", () => {
     process.env.APP_URL = "https://paula.function-concept.com";
     const mail = buildMasterLeadMail(tenant, lead);
 
-    expect(mail.subject).toContain("Engel: Max Mustermann");
+    expect(mail.subject).toContain("Function Concept: Max Mustermann");
     expect(mail.text).toContain("Anfrage: Privatrechtsschutz & Beratung");
     expect(mail.text).toContain("Zugewiesen an: Paula");
     expect(mail.text).toContain("Anrufen: tel:+491701234567");

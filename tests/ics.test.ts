@@ -19,10 +19,10 @@ describe("Kalender", () => {
         { uid: "a", start, durationMinutes: 60, summary: "Termin; Vertrag, Max", description: "Zeile 1\nZeile 2" },
         { uid: "b", start: new Date("2026-10-06T12:00:00Z"), summary: "Rückruf" },
       ],
-      { name: "Leads – Engel" },
+      { name: "Leads – Function Concept" },
     );
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2);
-    expect(ics).toContain("X-WR-CALNAME:Leads – Engel");
+    expect(ics).toContain("X-WR-CALNAME:Leads – Function Concept");
     expect(ics).toContain("DTEND:20261005T090000Z");
     expect(ics).toContain("DTEND:20261006T121500Z");
     expect(ics).toContain("SUMMARY:Termin\\; Vertrag\\, Max");

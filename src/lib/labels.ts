@@ -33,7 +33,3 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
 };
 
 export const STATUSES = Object.keys(STATUS_LABELS) as LeadStatus[];
-
-export function statusesForTenant(slug: string): LeadStatus[] {
-  return slug === "engel" ? STATUSES : STATUSES.filter((status) => status !== "ANGEBOT_VERSENDET");
-}

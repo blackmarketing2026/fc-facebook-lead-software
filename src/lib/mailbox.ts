@@ -30,7 +30,7 @@ function addressText(value: AddressObject | AddressObject[] | undefined): string
 }
 
 /**
- * Alle Empfänger einer Mail. Leitet ein Alias (z. B. martin@…) ins zentrale Postfach weiter,
+ * Alle Empfänger einer Mail. Leitet ein Alias ins Postfach weiter,
  * steht die ursprüngliche Adresse meist in To, Delivered-To oder X-Original-To.
  */
 function recipients(mail: ParsedMail): string {

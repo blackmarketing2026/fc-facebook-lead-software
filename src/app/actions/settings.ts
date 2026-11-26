@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { seesAllTenants, tenantFilter } from "@/lib/access";
+import { tenantFilter } from "@/lib/access";
 import { db } from "@/lib/db";
 import { assignNextSalesUser, rotationStartState } from "@/lib/distribution";
 import { buildLeadMail, sendAssigneeLeadMail } from "@/lib/lead-notify-mail";
@@ -75,13 +75,13 @@ export async function updateUser(userId: string, _prev: SettingsState, formData:
     passwordHash = await bcrypt.hash(pw.data, 12);
   }
 
-  const target = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId }, select: { id: true, role: true, isPlatformAdmin: true, platformGrants: { select: { tenantId: true } } } });
+  const target = await db.user.findFirst({ where: { id: userId, tenantId: admin.tenantId }, select: { id: true, role: true, isPlatformAdmin: true } });
   if (!target) return { error: "Mitglied nicht gefunden." };
   if (userId === admin.id && (!active || (target.role === "ADMIN" && parsed.data.role !== "ADMIN"))) {
     return { error: "Du kannst dich nicht selbst deaktivieren oder die Admin-Rolle entziehen." };
   }
-  if ((target.isPlatformAdmin || target.platformGrants.length > 0) && !admin.isPlatformAdmin) {
-    return { error: "Dieses Mitglied mit Plattformrechten kann nur der Master-Admin bearbeiten." };
+  if (target.isPlatformAdmin && !admin.isPlatformAdmin) {
+    return { error: "Der Master-Account kann nur vom Master selbst bearbeitet werden." };
   }
   if (await emailTaken(db, admin.tenantId, parsed.data.email, userId)) return { error: "Diese E-Mail-Adresse ist in diesem Dashboard schon vergeben." };
 
@@ -143,7 +143,7 @@ export async function resetDistributionRotation(input: unknown): Promise<Setting
   const parsed = rotationResetSchema.safeParse(input);
   if (!parsed.success) return { error: "Ungültige Rotationseinstellungen." };
   const { tenantId, orderIds, firstId } = parsed.data;
-  if (!seesAllTenants(admin) && tenantId !== admin.tenantId) return { error: "Kein Zugriff auf diese Plattform." };
+  if (tenantId !== admin.tenantId) return { error: "Kein Zugriff auf diese Plattform." };
   if (new Set(orderIds).size !== orderIds.length) return { error: "Die Reihenfolge enthält doppelte Mitglieder." };
 
   const result = await db.$transaction(async (tx) => {
@@ -213,7 +213,7 @@ export async function manualImport(_prev: SettingsState, formData: FormData): Pr
     subject: "Manueller Import",
     receivedAt: new Date(),
     text,
-  }, admin.tenantId);
+  });
   revalidatePath("/[tenant]/settings/mailbox", "page");
   revalidatePath("/[tenant]/leads", "page");
   if (result.status === "PROCESSED") {

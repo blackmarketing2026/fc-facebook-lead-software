@@ -2,26 +2,20 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { DistributionEditor } from "./distribution-editor";
 import { setDistributionPaused, setSalesAbsence } from "@/app/actions/settings";
-import { seesAllTenants } from "@/lib/access";
 import { RotationResetEditor } from "./rotation-reset-editor";
 
 export const metadata = { title: "Verteilung" };
 
 export default async function DistributionPage() {
   const admin = await requireAdmin();
-  const master = seesAllTenants(admin);
   const users = await db.user.findMany({
     where: { tenantId: admin.tenantId, OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] },
     orderBy: { distOrder: "asc" },
     select: { id: true, displayName: true, active: true, distWeight: true, distPaused: true, distOrder: true, distCurrent: true, absenceReason: true, substituteId: true },
   });
   const tenant = await db.tenant.findUniqueOrThrow({ where: { id: admin.tenantId }, select: { id: true, name: true, distributionPaused: true } });
-  const rotationTenants = master
-    ? await db.tenant.findMany({ orderBy: { code: "asc" }, select: { id: true, name: true, distributionPaused: true } })
-    : [tenant];
-  const rotationMembers = master
-    ? await db.user.findMany({ where: { OR: [{ role: "SALES" }, { role: "ADMIN", salesEnabled: true }] }, orderBy: { distOrder: "asc" }, select: { id: true, tenantId: true, displayName: true, active: true, distPaused: true, distWeight: true, distOrder: true } })
-    : users.map((member) => ({ ...member, tenantId: tenant.id }));
+  const rotationTenants = [tenant];
+  const rotationMembers = users.map((member) => ({ ...member, tenantId: tenant.id }));
 
   return (
     <div className="space-y-6">

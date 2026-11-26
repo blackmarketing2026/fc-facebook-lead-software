@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { leadScope, seesAllTenants } from "@/lib/access";
+import { leadScope } from "@/lib/access";
 import { db } from "@/lib/db";
 import { formatDateTime, formatTime } from "@/lib/format";
 import { REMINDER_LEAD_MINUTES, reminderIcon, reminderLabel } from "@/lib/reminder-types";
@@ -25,8 +25,7 @@ export async function GET() {
 
   const now = new Date();
   const soon = new Date(now.getTime() + REMINDER_LEAD_MINUTES * 60 * 1000);
-  const allTenants = seesAllTenants(user);
-  // Vertriebler: eigene Leads, Admin: alle des Dashboards, Hauptaccount: alle Dashboards.
+  // Vertriebler: eigene Leads, Admin: alle.
   const newLeadWhere = {
     ...leadScope(user),
     status: "NEU" as const,
@@ -42,7 +41,7 @@ export async function GET() {
     db.lead.findMany({
       where: newLeadWhere,
       orderBy: { createdAt: "desc" },
-      select: { id: true, fullName: true, receivedAt: true, tenant: { select: { name: true } } },
+      select: { id: true, fullName: true, receivedAt: true },
       take: 30,
     }),
     db.lead.count({ where: newLeadWhere }),
@@ -64,7 +63,7 @@ export async function GET() {
       kind: "lead" as const,
       icon: "✨",
       title: `Neuer Lead: ${l.fullName ?? "Unbekannt"}`,
-      subtitle: `${allTenants ? `${l.tenant.name} · ` : ""}Eingang ${formatDateTime(l.receivedAt)}`,
+      subtitle: `Eingang ${formatDateTime(l.receivedAt)}`,
       href: tenantPath(user.tenant.slug, `/leads/${l.id}`),
     })),
   ];

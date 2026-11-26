@@ -1,5 +1,4 @@
 import { db } from "@/lib/db";
-import { hasFeature } from "@/lib/features";
 import { formatDateTime } from "@/lib/format";
 import { STATUS_LABELS } from "@/lib/labels";
 import { leadListFilters, leadListWhere } from "@/lib/lead-filters";
@@ -10,12 +9,12 @@ function csvCell(value: string | null | undefined): string {
   return /[";\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
-/** CSV-Export der gefilterten Lead-Liste (Feature "leads-csv-export"). */
+/** CSV-Export der gefilterten Lead-Liste. */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return new Response("Nicht angemeldet", { status: 401 });
-  if (user.role !== "ADMIN" || !hasFeature(user.tenant, "leads-csv-export")) {
-    return new Response("Nicht freigeschaltet", { status: 403 });
+  if (user.role !== "ADMIN") {
+    return new Response("Nur für Admins", { status: 403 });
   }
 
   const params = Object.fromEntries(new URL(request.url).searchParams);

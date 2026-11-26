@@ -2,15 +2,14 @@ import { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { assignNextSalesUser } from "./distribution";
 import { PLATFORM_TENANT_SLUG, tenantPath } from "./tenant-paths";
-import { parseLeadText, type ParsedAnswer } from "./lead-parser";
-import { resolveTenantId, tenantCodeFromSubject } from "./lead-routing";
+import { parseLeadText } from "./lead-parser";
 import { sendAssigneeLeadMail, sendLeadNotificationMail, sendMasterLeadMail } from "./lead-notify-mail";
 import { sendPushToUser } from "./push";
 
 export type InboundMail = {
   messageId: string;
   from?: string | null;
-  /** Alle Empfänger-Adressen (To, Cc, Delivered-To …) für die Mandanten-Zuordnung. */
+  /** Alle Empfänger-Adressen (To, Cc, Delivered-To …). */
   to?: string | null;
   subject?: string | null;
   receivedAt?: Date;
@@ -23,34 +22,23 @@ export type ProcessResult =
   | { status: "IGNORED" | "FAILED"; error: string; inboundId: string }
   | { status: "PROCESSED"; leadId: string; assignedToId: string | null; inboundId: string };
 
-/**
- * Mandant für eine Mail aus dem zentralen Postfach: Dashboard-ID im Betreff, sonst erste passende
- * Zuordnungsregel, sonst der Plattform-Mandant (Function Concept).
- */
-async function tenantForMail(mail: Pick<InboundMail, "to" | "subject">, answers: ParsedAnswer[]): Promise<string> {
-  const tenants = await db.tenant.findMany({ select: { id: true, code: true } });
-  const code = tenantCodeFromSubject(mail.subject, tenants.map((t) => t.code));
-  if (code) return tenants.find((t) => t.code === code)!.id;
-
-  const rules = await db.leadRoute.findMany({ select: { tenantId: true, type: true, pattern: true, priority: true } });
-  const matched = resolveTenantId(rules, mail, answers);
-  if (matched) return matched;
+/** Alle Leads gehören zum einzigen Dashboard (Function Concept). */
+async function platformTenantId(): Promise<string> {
   const platform = await db.tenant.findUniqueOrThrow({ where: { slug: PLATFORM_TENANT_SLUG }, select: { id: true } });
   return platform.id;
 }
 
 /**
- * Verarbeitet eine eingehende Mail: speichert sie, ordnet sie einem Mandanten zu, parst den Lead,
- * legt ihn an, verteilt ihn per Round-Robin und benachrichtigt den Vertriebler.
- * forceTenantId: für den manuellen Import aus einem bestimmten Dashboard.
+ * Verarbeitet eine eingehende Mail: speichert sie, parst den Lead, legt ihn an,
+ * verteilt ihn per Round-Robin und benachrichtigt den Vertriebler.
  */
-export async function processInboundMail(mail: InboundMail, forceTenantId?: string): Promise<ProcessResult> {
+export async function processInboundMail(mail: InboundMail): Promise<ProcessResult> {
   const existing = await db.inboundEmail.findUnique({ where: { messageId: mail.messageId } });
   if (existing) return { status: "DUPLICATE" };
 
   const rawText = mail.text || mail.html || "";
   const parsed = parseLeadText(mail.text, mail.html);
-  const tenantId = forceTenantId ?? (await tenantForMail(mail, parsed.ok ? parsed.lead.answers : []));
+  const tenantId = await platformTenantId();
   const inboundData = {
     tenantId,
     messageId: mail.messageId,
@@ -105,7 +93,7 @@ export async function reprocessInbound(inboundId: string): Promise<ProcessResult
     await db.inboundEmail.update({ where: { id: inboundId }, data: { error: parsed.error } });
     return { status: inbound.status === "FAILED" ? "FAILED" : "IGNORED", error: parsed.error, inboundId };
   }
-  const tenantId = inbound.tenantId ?? (await tenantForMail(inbound, parsed.lead.answers));
+  const tenantId = inbound.tenantId ?? (await platformTenantId());
   const { lead, assignedToId } = await db.$transaction(async (tx) => {
     await tx.inboundEmail.update({ where: { id: inboundId }, data: { status: "PROCESSED", error: null, tenantId } });
     return createLead(tx, tenantId, parsed.lead, inboundId, inbound.receivedAt);
@@ -154,30 +142,13 @@ async function notifyNewLead(tenantId: string, leadId: string, name: string | nu
   await sendLeadNotificationMail(tenantId, leadId, masterEmail ?? undefined).catch((err) => console.error("[mail]", err));
   if (userId) await sendAssigneeLeadMail(leadId).catch((err) => console.error("[mail]", err));
 
-  // Push an den zugewiesenen Vertriebler, die Admins des Dashboards und den Hauptaccount (sieht alle Dashboards).
-  const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { slug: true, name: true } });
-  const [admins, mainAccounts] = await Promise.all([
-    db.user.findMany({ where: { tenantId, role: "ADMIN", active: true }, select: { id: true } }),
-    db.user.findMany({
-      where: { tenant: { slug: PLATFORM_TENANT_SLUG }, role: "ADMIN", isPlatformAdmin: true, active: true },
-      select: { id: true },
-    }),
-  ]);
+  // Push an den zugewiesenen Vertriebler und alle Admins.
+  const admins = await db.user.findMany({ where: { tenantId, role: "ADMIN", active: true }, select: { id: true } });
   const recipients = new Map<string, { url: string; body: string }>();
   const leadName = name ?? "Unbekannt";
-  for (const u of mainAccounts) {
-    recipients.set(u.id, {
-      url: tenantPath(PLATFORM_TENANT_SLUG, `/leads/${leadId}`),
-      body: tenant.slug === PLATFORM_TENANT_SLUG ? `Neuer Lead: ${leadName}` : `Neuer Lead: ${leadName} · ${tenant.name}`,
-    });
-  }
-  for (const u of admins) recipients.set(u.id, { url: tenantPath(tenant.slug, `/leads/${leadId}`), body: `Neuer Lead: ${leadName}` });
-  if (userId) {
-    recipients.set(userId, {
-      url: tenantPath(tenant.slug, `/leads/${leadId}`),
-      body: name ? `Neuer Lead: ${name}` : "Ein neuer Lead wurde dir zugewiesen",
-    });
-  }
+  const url = tenantPath(PLATFORM_TENANT_SLUG, `/leads/${leadId}`);
+  for (const u of admins) recipients.set(u.id, { url, body: `Neuer Lead: ${leadName}` });
+  if (userId) recipients.set(userId, { url, body: name ? `Neuer Lead: ${name}` : "Ein neuer Lead wurde dir zugewiesen" });
   await Promise.all(
     [...recipients].map(([id, { url, body }]) =>
       sendPushToUser(id, { title: "Neuer Lead", body, url, tag: `lead-${leadId}` }).catch((err) => console.error("[push]", err)),
