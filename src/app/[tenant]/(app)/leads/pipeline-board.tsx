@@ -5,7 +5,7 @@ import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { createStage, deleteLead, deleteStage, moveLeadToStage, moveStage, renameStage, setDefaultStage } from "@/app/actions/pipeline";
 
 export type BoardStage = { id: string; name: string; isDefault: boolean };
-export type BoardLead = { id: string; fullName: string | null; phone: string | null; email: string | null; receivedAt: string; stageId: string | null };
+export type BoardLead = { id: string; fullName: string | null; phone: string | null; email: string | null; receivedAt: string; stageId: string | null; optOut: boolean };
 
 type Op = { type: "move"; id: string; stageId: string } | { type: "delete"; id: string };
 
@@ -200,6 +200,7 @@ export function PipelineBoard({ stages, leads, base, isAdmin }: { stages: BoardS
                         )}
                       </div>
                     </div>
+                    {lead.optOut && <div className="mt-2"><span className="badge bg-red-50 text-red-700" title="Hat sich vom E-Mail-Verteiler abgemeldet">✉ abgemeldet</span></div>}
                     {(lead.phone || lead.email) && (
                       <div className="mt-2 space-y-0.5 text-xs text-slate-600">
                         {lead.phone && <div className="truncate">📱 {lead.phone}</div>}

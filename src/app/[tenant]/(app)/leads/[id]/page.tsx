@@ -88,6 +88,7 @@ export default async function LeadDetailPage(props: PageProps<"/[tenant]/leads/[
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">{lead.fullName || "Unbekannt"}</h1>
+            {lead.emailOptOut && <p className="mt-1"><span className="badge bg-red-50 text-red-700" title="Hat sich vom E-Mail-Verteiler abgemeldet">✉ abgemeldet</span></p>}
             <p className="mt-1 text-sm text-slate-500">
               Eingegangen am {formatDateTime(lead.receivedAt)}
               {lead.language && ` · Sprache: ${lead.language}`}

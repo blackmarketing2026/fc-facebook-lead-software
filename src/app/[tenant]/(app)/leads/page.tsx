@@ -90,7 +90,7 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
       {!table && (
         <PipelineBoard
           stages={stages}
-          leads={leads.map((l) => ({ id: l.id, fullName: l.fullName, phone: l.phone, email: l.email, receivedAt: l.receivedAt.toISOString(), stageId: l.stageId }))}
+          leads={leads.map((l) => ({ id: l.id, fullName: l.fullName, phone: l.phone, email: l.email, receivedAt: l.receivedAt.toISOString(), stageId: l.stageId, optOut: l.emailOptOut }))}
           base={base}
           isAdmin={user.role === "ADMIN"}
         />
@@ -100,7 +100,7 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
       <div className="space-y-3 md:hidden">
         {leads.length === 0 && <div className="card p-8 text-center text-sm text-slate-500">Keine Leads gefunden.</div>}
         {leads.map((lead) => <Link key={lead.id} href={`${base}/${lead.id}`} className="card lead-mobile-card block p-4">
-          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate font-semibold">{lead.fullName || "Unbekannt"}</div><div className="mt-1 text-xs text-slate-500">{formatDateTime(lead.receivedAt)}</div></div><span className="badge bg-slate-100 text-slate-700">{stageName.get(lead.stageId ?? "") ?? "–"}</span></div>
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate font-semibold">{lead.fullName || "Unbekannt"}</div>{lead.emailOptOut && <div className="mt-1"><span className="badge bg-red-50 text-red-700" title="Hat sich vom E-Mail-Verteiler abgemeldet">✉ abgemeldet</span></div>}<div className="mt-1 text-xs text-slate-500">{formatDateTime(lead.receivedAt)}</div></div><span className="badge bg-slate-100 text-slate-700">{stageName.get(lead.stageId ?? "") ?? "–"}</span></div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">{lead.phone && <span>{lead.phone}</span>}</div>
           <div className="mt-3 border-t border-slate-100 pt-3 text-right text-sm font-semibold text-[var(--accent-dark)]">Lead öffnen →</div>
         </Link>)}
@@ -132,6 +132,7 @@ export default async function LeadsPage(props: PageProps<"/[tenant]/leads">) {
                   <Link href={`${base}/${lead.id}`} className="text-blue-700 hover:underline">
                     {lead.fullName || "Unbekannt"}
                   </Link>
+                  {lead.emailOptOut && <>{" "}<span className="badge bg-red-50 text-red-700" title="Hat sich vom E-Mail-Verteiler abgemeldet">✉ abgemeldet</span></>}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">{lead.phone}</td>
                 <td className="px-4 py-3">{lead.email}</td>
