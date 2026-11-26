@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useRef, useState, useTransition } from "react";
 import { addStep, deleteChain, deleteStep, moveStep, sendTestStep, setChainActive, updateChain, updateStep, type ChainState } from "@/app/actions/chains";
 
-type Step = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS" };
+type StepData = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS" };
+/** `key` bleibt stabil, auch wenn aus der vorläufigen ID nach dem Speichern die echte wird. */
+type Step = StepData & { key: string; saving?: boolean };
 type Chain = { id: string; name: string; active: boolean; tag: string };
 
-const UNITS: Record<Step["waitUnit"], string> = { MINUTES: "Minuten", HOURS: "Stunden", DAYS: "Tage" };
+const UNITS: Record<StepData["waitUnit"], string> = { MINUTES: "Minuten", HOURS: "Stunden", DAYS: "Tage" };
 
 function Status({ state }: { state: ChainState }) {
   return (
@@ -17,15 +19,65 @@ function Status({ state }: { state: ChainState }) {
   );
 }
 
-export function ChainEditor({ chain, steps, knownTags, testEmail }: { chain: Chain; steps: Step[]; knownTags: string[]; testEmail: string }) {
+export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail }: { chain: Chain; steps: StepData[]; knownTags: string[]; testEmail: string }) {
   const [settings, settingsAction, settingsPending] = useActionState(updateChain.bind(null, chain.id), undefined);
   const [busy, start] = useTransition();
   const [info, setInfo] = useState<ChainState>();
+  const [steps, setSteps] = useState<Step[]>(() => initialSteps.map((s) => ({ ...s, key: s.id })));
+  const tempCounter = useRef(0);
+
   const run = (fn: () => Promise<ChainState | void>) =>
     start(async () => {
       const res = await fn();
       setInfo(res ?? undefined);
     });
+
+  // Änderungen erscheinen sofort; der Server zieht im Hintergrund nach. Bei einem Fehler wird der alte Stand wiederhergestellt.
+  function insert(index: number, type: "EMAIL" | "WAIT") {
+    const key = `tmp-${++tempCounter.current}`;
+    const fresh: Step = { key, id: key, type, subject: "", body: "", waitValue: 1, waitUnit: "DAYS", saving: true };
+    const before = steps;
+    setSteps((cur) => [...cur.slice(0, index), fresh, ...cur.slice(index)]);
+    void addStep(chain.id, index, type).then((res) => {
+      if (res?.id) setSteps((cur) => cur.map((s) => (s.key === key ? { ...s, id: res.id!, saving: false } : s)));
+      else {
+        setSteps(before);
+        setInfo({ error: res?.error ?? "Schritt konnte nicht hinzugefügt werden." });
+      }
+    });
+  }
+
+  function remove(step: Step) {
+    if (!confirm("Diesen Schritt löschen?")) return;
+    const before = steps;
+    setSteps((cur) => cur.filter((s) => s.key !== step.key));
+    void deleteStep(step.id).then((res) => {
+      if (res?.error) {
+        setSteps(before);
+        setInfo(res);
+      }
+    });
+  }
+
+  function move(step: Step, direction: -1 | 1) {
+    const before = steps;
+    setSteps((cur) => {
+      const i = cur.findIndex((s) => s.key === step.key);
+      const j = i + direction;
+      if (i < 0 || j < 0 || j >= cur.length) return cur;
+      const next = [...cur];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+    void moveStep(step.id, direction).then((res) => {
+      if (res?.error) {
+        setSteps(before);
+        setInfo(res);
+      }
+    });
+  }
+
+  const saved = (key: string, patch: Partial<StepData>) => setSteps((cur) => cur.map((s) => (s.key === key ? { ...s, ...patch } : s)));
 
   return (
     <div className="space-y-6">
@@ -76,11 +128,11 @@ export function ChainEditor({ chain, steps, knownTags, testEmail }: { chain: Cha
         <div className="mx-auto flex items-center gap-2 rounded-full bg-green-600 px-5 py-2 text-sm font-semibold text-white shadow">
           ▶ Start · Tag „{chain.tag}“ wird vergeben
         </div>
-        <Connector index={0} chainId={chain.id} />
+        <Connector index={0} onAdd={insert} />
         {steps.map((step, i) => (
-          <div key={step.id} className="flex flex-col items-stretch">
-            <StepCard step={step} index={i} total={steps.length} testEmail={testEmail} />
-            <Connector index={i + 1} chainId={chain.id} />
+          <div key={step.key} className="flex flex-col items-stretch">
+            <StepCard step={step} index={i} total={steps.length} testEmail={testEmail} onMove={move} onRemove={remove} onSaved={saved} />
+            <Connector index={i + 1} onAdd={insert} />
           </div>
         ))}
         {steps.length === 0 && <p className="mb-2 text-center text-xs text-slate-400">Noch keine Schritte – füge mit „+“ eine E-Mail oder Wartezeit hinzu.</p>}
@@ -90,12 +142,11 @@ export function ChainEditor({ chain, steps, knownTags, testEmail }: { chain: Cha
   );
 }
 
-function Connector({ index, chainId }: { index: number; chainId: string }) {
+function Connector({ index, onAdd }: { index: number; onAdd: (index: number, type: "EMAIL" | "WAIT") => void }) {
   const [open, setOpen] = useState(false);
-  const [pending, start] = useTransition();
   const add = (type: "EMAIL" | "WAIT") => {
     setOpen(false);
-    start(async () => void (await addStep(chainId, index, type)));
+    onAdd(index, type);
   };
   return (
     <div className="relative mx-auto flex h-14 w-full flex-col items-center">
@@ -110,7 +161,6 @@ function Connector({ index, chainId }: { index: number; chainId: string }) {
         ) : (
           <button
             type="button"
-            disabled={pending}
             aria-label="Schritt hinzufügen"
             onClick={() => setOpen(true)}
             className="grid h-8 w-8 place-items-center rounded-full bg-white text-lg font-semibold text-slate-500 shadow ring-1 ring-slate-300 hover:bg-slate-50 hover:text-slate-800"
@@ -123,36 +173,54 @@ function Connector({ index, chainId }: { index: number; chainId: string }) {
   );
 }
 
-function StepControls({ step, index, total }: { step: Step; index: number; total: number }) {
-  const [pending, start] = useTransition();
+type CardProps = {
+  step: Step;
+  index: number;
+  total: number;
+  testEmail: string;
+  onMove: (step: Step, direction: -1 | 1) => void;
+  onRemove: (step: Step) => void;
+  onSaved: (key: string, patch: Partial<StepData>) => void;
+};
+
+function StepControls({ step, index, total, onMove, onRemove }: Pick<CardProps, "step" | "index" | "total" | "onMove" | "onRemove">) {
+  const locked = Boolean(step.saving);
   return (
     <div className="flex items-center gap-1 text-slate-500">
-      <button type="button" disabled={pending || index === 0} aria-label="Nach oben" className="rounded px-2 py-1 hover:bg-slate-100 disabled:opacity-30" onClick={() => start(async () => void (await moveStep(step.id, -1)))}>↑</button>
-      <button type="button" disabled={pending || index === total - 1} aria-label="Nach unten" className="rounded px-2 py-1 hover:bg-slate-100 disabled:opacity-30" onClick={() => start(async () => void (await moveStep(step.id, 1)))}>↓</button>
-      <button
-        type="button"
-        disabled={pending}
-        aria-label="Schritt löschen"
-        className="rounded px-2 py-1 text-red-600 hover:bg-red-50"
-        onClick={() => confirm("Diesen Schritt löschen?") && start(async () => void (await deleteStep(step.id)))}
-      >
-        🗑
-      </button>
+      <button type="button" disabled={locked || index === 0} aria-label="Nach oben" className="rounded px-2 py-1 hover:bg-slate-100 disabled:opacity-30" onClick={() => onMove(step, -1)}>↑</button>
+      <button type="button" disabled={locked || index === total - 1} aria-label="Nach unten" className="rounded px-2 py-1 hover:bg-slate-100 disabled:opacity-30" onClick={() => onMove(step, 1)}>↓</button>
+      <button type="button" disabled={locked} aria-label="Schritt löschen" className="rounded px-2 py-1 text-red-600 hover:bg-red-50 disabled:opacity-30" onClick={() => onRemove(step)}>🗑</button>
     </div>
   );
 }
 
-function StepCard({ step, index, total, testEmail }: { step: Step; index: number; total: number; testEmail: string }) {
-  const [state, action, pending] = useActionState(updateStep.bind(null, step.id), undefined);
+function StepCard(props: CardProps) {
+  const { step, onSaved } = props;
+  const [state, setState] = useState<ChainState>();
+  const [pending, start] = useTransition();
+
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    start(async () => {
+      const res = await updateStep(step.id, undefined, form);
+      setState(res);
+      if (res?.ok) {
+        if (step.type === "WAIT") onSaved(step.key, { waitValue: Number(form.get("waitValue")), waitUnit: String(form.get("waitUnit")) as StepData["waitUnit"] });
+        else onSaved(step.key, { subject: String(form.get("subject") ?? "").trim(), body: String(form.get("body") ?? "") });
+      }
+    });
+  };
+  const disabled = pending || Boolean(step.saving);
 
   if (step.type === "WAIT") {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-amber-900">⏱ Wartezeit</span>
-          <StepControls step={step} index={index} total={total} />
+          <span className="text-sm font-semibold text-amber-900">⏱ Wartezeit {step.saving && <span className="font-normal text-amber-700">· wird angelegt …</span>}</span>
+          <StepControls {...props} />
         </div>
-        <form action={action} className="mt-2 flex flex-wrap items-center gap-2">
+        <form onSubmit={submit} className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-sm text-amber-900">Warte</span>
           <input name="waitValue" type="number" min={1} defaultValue={step.waitValue} className="input !w-24" aria-label="Dauer" />
           <select name="waitUnit" defaultValue={step.waitUnit} className="input !w-auto" aria-label="Einheit">
@@ -160,17 +228,17 @@ function StepCard({ step, index, total, testEmail }: { step: Step; index: number
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
-          <button disabled={pending} className="btn-secondary !py-1.5 text-sm">{pending ? "…" : "Speichern"}</button>
+          <button disabled={disabled} className="btn-secondary !py-1.5 text-sm">{pending ? "…" : "Speichern"}</button>
           <Status state={state} />
         </form>
       </div>
     );
   }
 
-  return <EmailCard step={step} index={index} total={total} testEmail={testEmail} state={state} action={action} pending={pending} />;
+  return <EmailCard {...props} submit={submit} state={state} disabled={disabled} pending={pending} />;
 }
 
-function EmailCard({ step, index, total, testEmail, state, action, pending }: { step: Step; index: number; total: number; testEmail: string; state: ChainState; action: (payload: FormData) => void; pending: boolean }) {
+function EmailCard({ step, index, total, testEmail, onMove, onRemove, submit, state, disabled, pending }: CardProps & { submit: (e: React.FormEvent<HTMLFormElement>) => void; state: ChainState; disabled: boolean; pending: boolean }) {
   const [open, setOpen] = useState(!step.subject);
   const [to, setTo] = useState(testEmail);
   const [testing, startTest] = useTransition();
@@ -179,13 +247,13 @@ function EmailCard({ step, index, total, testEmail, state, action, pending }: { 
     <div className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
-          <span className="text-sm font-semibold text-blue-900">✉️ E-Mail</span>
+          <span className="text-sm font-semibold text-blue-900">✉️ E-Mail {step.saving && <span className="font-normal text-blue-600">· wird angelegt …</span>}</span>
           <span className="block truncate text-sm text-slate-600">{step.subject || "Noch kein Betreff – zum Bearbeiten öffnen"}</span>
         </button>
-        <StepControls step={step} index={index} total={total} />
+        <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} />
       </div>
       {open && (
-        <form action={action} className="mt-3 space-y-3">
+        <form onSubmit={submit} className="mt-3 space-y-3">
           <label className="block">
             <span className="label">Betreff</span>
             <input name="subject" defaultValue={step.subject} maxLength={300} className="input" placeholder="Willkommen, {{vorname}}!" />
@@ -196,12 +264,12 @@ function EmailCard({ step, index, total, testEmail, state, action, pending }: { 
           </label>
           <p className="text-xs text-slate-500">Platzhalter: <code>{"{{vorname}}"}</code>, <code>{"{{name}}"}</code>, <code>{"{{email}}"}</code>. Der Abmelde-Link wird automatisch angehängt.</p>
           <div className="flex flex-wrap items-center gap-3">
-            <button disabled={pending} className="btn-primary">{pending ? "Speichern …" : "Speichern"}</button>
+            <button disabled={disabled} className="btn-primary">{pending ? "Speichern …" : "Speichern"}</button>
             <Status state={state} />
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
             <input type="email" value={to} onChange={(e) => setTo(e.target.value)} className="input !w-64 max-w-full" aria-label="Test-Empfänger" />
-            <button type="button" disabled={testing} className="btn-secondary" onClick={() => startTest(async () => setTestState(await sendTestStep(step.id, to)))}>
+            <button type="button" disabled={testing || Boolean(step.saving)} className="btn-secondary" onClick={() => startTest(async () => setTestState(await sendTestStep(step.id, to)))}>
               {testing ? "Sende …" : "Test-Mail senden"}
             </button>
             <Status state={testState} />

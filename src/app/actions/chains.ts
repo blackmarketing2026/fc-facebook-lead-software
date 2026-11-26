@@ -12,7 +12,7 @@ import { mailerConfigured, sendMail } from "@/lib/mailer";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
 
-export type ChainState = { error?: string; ok?: string } | undefined;
+export type ChainState = { error?: string; ok?: string; id?: string } | undefined;
 
 function refresh(chainId?: string) {
   revalidatePath("/[tenant]/email-chains", "page");
@@ -21,11 +21,6 @@ function refresh(chainId?: string) {
 
 async function ownChain(chainId: string, tenantId: string) {
   return db.emailChain.findFirst({ where: { id: chainId, tenantId } });
-}
-
-async function renumber(chainId: string, order: string[]) {
-  await db.$transaction(order.map((id, i) => db.emailChainStep.update({ where: { id }, data: { position: i } })));
-  void chainId;
 }
 
 const chainSchema = z.object({
@@ -78,19 +73,23 @@ export async function deleteChain(chainId: string): Promise<ChainState> {
   redirect(tenantPath(admin.tenant.slug, "/email-chains"));
 }
 
-/** Fügt an der Stelle `index` (0 = direkt nach dem Start) einen Schritt ein. */
+/**
+ * Fügt an der Stelle `index` (0 = direkt nach dem Start) einen Schritt ein und gibt dessen ID zurück.
+ * Bewusst ohne revalidatePath: Der Editor führt die Schritte selbst nach (schnelle Anzeige, weniger Datenbank-Zugriffe).
+ */
 export async function addStep(chainId: string, index: number, type: "EMAIL" | "WAIT"): Promise<ChainState> {
   const admin = await requireAdmin();
-  if (!(await ownChain(chainId, admin.tenantId))) return { error: "Kette nicht gefunden." };
-  const steps = await db.emailChainStep.findMany({ where: { chainId }, orderBy: { position: "asc" }, select: { id: true } });
-  const created = await db.emailChainStep.create({
-    data: type === "WAIT" ? { chainId, position: steps.length, type, waitValue: 1, waitUnit: "DAYS" } : { chainId, position: steps.length, type, subject: "", body: "" },
-  });
-  const order = steps.map((s) => s.id);
-  order.splice(Math.max(0, Math.min(index, order.length)), 0, created.id);
-  await renumber(chainId, order);
-  refresh(chainId);
-  return { ok: "Schritt hinzugefügt." };
+  const [chain, count] = await Promise.all([ownChain(chainId, admin.tenantId), db.emailChainStep.count({ where: { chainId } })]);
+  if (!chain) return { error: "Kette nicht gefunden." };
+  const position = Math.max(0, Math.min(Math.trunc(index), count));
+  const data = type === "WAIT"
+    ? { chainId, position, type, waitValue: 1, waitUnit: "DAYS" as const }
+    : { chainId, position, type, subject: "", body: "" };
+  const [, created] = await db.$transaction([
+    db.emailChainStep.updateMany({ where: { chainId, position: { gte: position } }, data: { position: { increment: 1 } } }),
+    db.emailChainStep.create({ data, select: { id: true } }),
+  ]);
+  return { ok: "Schritt hinzugefügt.", id: created.id };
 }
 
 const emailStepSchema = z.object({ subject: z.string().trim().max(300), body: z.string().max(20000) });
@@ -109,7 +108,6 @@ export async function updateStep(stepId: string, _prev: ChainState, formData: Fo
     if (!parsed.success) return { error: "Betreff (max. 300 Zeichen) oder Text ist ungültig." };
     await db.emailChainStep.update({ where: { id: stepId }, data: parsed.data });
   }
-  refresh(step.chainId);
   return { ok: "Gespeichert." };
 }
 
@@ -117,14 +115,15 @@ export async function moveStep(stepId: string, direction: -1 | 1): Promise<Chain
   const admin = await requireAdmin();
   const step = await db.emailChainStep.findFirst({ where: { id: stepId, chain: { tenantId: admin.tenantId } } });
   if (!step) return { error: "Schritt nicht gefunden." };
-  const steps = await db.emailChainStep.findMany({ where: { chainId: step.chainId }, orderBy: { position: "asc" }, select: { id: true } });
-  const order = steps.map((s) => s.id);
-  const i = order.indexOf(stepId);
-  const j = i + direction;
-  if (j < 0 || j >= order.length) return { ok: "" };
-  [order[i], order[j]] = [order[j], order[i]];
-  await renumber(step.chainId, order);
-  refresh(step.chainId);
+  const neighbor = await db.emailChainStep.findFirst({
+    where: { chainId: step.chainId, position: direction === -1 ? { lt: step.position } : { gt: step.position } },
+    orderBy: { position: direction === -1 ? "desc" : "asc" },
+  });
+  if (!neighbor) return { ok: "" };
+  await db.$transaction([
+    db.emailChainStep.update({ where: { id: step.id }, data: { position: neighbor.position } }),
+    db.emailChainStep.update({ where: { id: neighbor.id }, data: { position: step.position } }),
+  ]);
   return { ok: "Verschoben." };
 }
 
@@ -132,10 +131,10 @@ export async function deleteStep(stepId: string): Promise<ChainState> {
   const admin = await requireAdmin();
   const step = await db.emailChainStep.findFirst({ where: { id: stepId, chain: { tenantId: admin.tenantId } } });
   if (!step) return { error: "Schritt nicht gefunden." };
-  await db.emailChainStep.delete({ where: { id: stepId } });
-  const rest = await db.emailChainStep.findMany({ where: { chainId: step.chainId }, orderBy: { position: "asc" }, select: { id: true } });
-  await renumber(step.chainId, rest.map((s) => s.id));
-  refresh(step.chainId);
+  await db.$transaction([
+    db.emailChainStep.delete({ where: { id: stepId } }),
+    db.emailChainStep.updateMany({ where: { chainId: step.chainId, position: { gt: step.position } }, data: { position: { decrement: 1 } } }),
+  ]);
   return { ok: "Schritt gelöscht." };
 }
 
