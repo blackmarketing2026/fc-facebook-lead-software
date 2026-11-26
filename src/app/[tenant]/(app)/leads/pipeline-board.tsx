@@ -68,17 +68,35 @@ export function PipelineBoard({ stages, leads, base, isAdmin }: { stages: BoardS
   };
 
   const stageName = (id: string | null) => stages.find((s) => s.id === id)?.name;
+  const defaultId = stages.find((s) => s.isDefault)?.id;
 
   return (
     <div className="space-y-3">
       {error && <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 ring-1 ring-red-200">{error}</div>}
-      <div className="flex items-start gap-4 overflow-x-auto pb-4">
+      {/* Mobil: Sprungleiste zu den Phasen */}
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 md:hidden" aria-label="Phasen">
+        {stages.map((stage) => {
+          const count = optimistic.filter((l) => (l.stageId ?? defaultId) === stage.id).length;
+          return (
+            <button
+              key={stage.id}
+              type="button"
+              onClick={() => document.getElementById(`stage-col-${stage.id}`)?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" })}
+              className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200"
+            >
+              {stage.name} <span className="tabular-nums text-slate-400">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex snap-x snap-mandatory items-start gap-3 overflow-x-auto pb-4 md:snap-none md:gap-4">
         {stages.map((stage, index) => {
-          const cards = optimistic.filter((l) => (l.stageId ?? stages.find((s) => s.isDefault)?.id) === stage.id);
+          const cards = optimistic.filter((l) => (l.stageId ?? defaultId) === stage.id);
           const accent = ACCENTS[index % ACCENTS.length];
           return (
             <section
               key={stage.id}
+              id={`stage-col-${stage.id}`}
               onDragOver={(e) => {
                 if (!dragId) return;
                 e.preventDefault();
@@ -91,7 +109,7 @@ export function PipelineBoard({ stages, leads, base, isAdmin }: { stages: BoardS
                 if (dragId) move(dragId, stage.id);
                 setDragId(null);
               }}
-              className={`flex max-h-[calc(100vh-15rem)] min-h-[16rem] w-72 shrink-0 flex-col rounded-xl bg-slate-100/80 ring-1 transition ${overStage === stage.id ? "ring-2 ring-blue-500" : "ring-slate-200"}`}
+              className={`flex min-h-[12rem] w-[84vw] max-w-sm shrink-0 snap-start flex-col md:max-h-[calc(100dvh-15rem)] md:min-h-[16rem] md:w-72 rounded-xl bg-slate-100/80 ring-1 transition ${overStage === stage.id ? "ring-2 ring-blue-500" : "ring-slate-200"}`}
             >
               <header className="flex items-center gap-2 border-t-4 px-3 py-3" style={{ borderColor: accent, borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
                 {renaming === stage.id ? (
@@ -115,7 +133,7 @@ export function PipelineBoard({ stages, leads, base, isAdmin }: { stages: BoardS
                 <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium tabular-nums text-slate-600">{cards.length}</span>
                 {isAdmin && (
                   <div className="relative" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" aria-label="Phase-Menü" className="rounded px-1.5 text-slate-500 hover:bg-white" onClick={() => setMenu(menu === `s-${stage.id}` ? null : `s-${stage.id}`)}>
+                    <button type="button" aria-label="Phase-Menü" className="rounded px-2.5 py-1 text-lg leading-none text-slate-500 hover:bg-white md:px-1.5 md:py-0 md:text-base" onClick={() => setMenu(menu === `s-${stage.id}` ? null : `s-${stage.id}`)}>
                       ⋯
                     </button>
                     {menu === `s-${stage.id}` && (
@@ -141,7 +159,7 @@ export function PipelineBoard({ stages, leads, base, isAdmin }: { stages: BoardS
                 )}
               </header>
 
-              <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-2">
+              <div className="flex-1 space-y-2 px-2 pb-2 md:overflow-y-auto">
                 {cards.map((lead) => (
                   <article
                     key={lead.id}
@@ -166,14 +184,14 @@ export function PipelineBoard({ stages, leads, base, isAdmin }: { stages: BoardS
                         <div className="text-xs text-slate-500">{formatDate(lead.receivedAt)}</div>
                       </div>
                       <div className="relative" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" aria-label="Lead-Menü" className="rounded px-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setMenu(menu === `l-${lead.id}` ? null : `l-${lead.id}`)}>
+                        <button type="button" aria-label="Lead-Menü" className="rounded px-2.5 py-1 text-lg leading-none text-slate-500 hover:bg-slate-100 md:px-1.5 md:py-0 md:text-base" onClick={() => setMenu(menu === `l-${lead.id}` ? null : `l-${lead.id}`)}>
                           ⋮
                         </button>
                         {menu === `l-${lead.id}` && (
-                          <div className="absolute right-0 z-20 mt-1 w-60 rounded-lg bg-white p-1 text-sm shadow-lg ring-1 ring-slate-200">
+                          <div className="absolute right-0 z-20 mt-1 max-h-[60vh] w-60 overflow-y-auto rounded-lg bg-white p-1 text-sm shadow-lg ring-1 ring-slate-200">
                             <Link href={`${base}/${lead.id}`} className="menu-item block">Lead öffnen</Link>
                             <div className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-slate-400">Verschieben nach</div>
-                            {stages.filter((s) => s.id !== (lead.stageId ?? stages.find((d) => d.isDefault)?.id)).map((s) => (
+                            {stages.filter((s) => s.id !== (lead.stageId ?? defaultId)).map((s) => (
                               <button key={s.id} className="menu-item" onClick={() => { setMenu(null); move(lead.id, s.id); }}>{s.name}</button>
                             ))}
                             <div className="my-1 border-t border-slate-100" />
@@ -201,7 +219,7 @@ export function PipelineBoard({ stages, leads, base, isAdmin }: { stages: BoardS
         })}
 
         {isAdmin && (
-          <div className="w-72 shrink-0">
+          <div className="w-[84vw] max-w-sm shrink-0 snap-start md:w-72">
             {adding ? (
               <form
                 className="space-y-2 rounded-xl bg-slate-100/80 p-3 ring-1 ring-slate-200"

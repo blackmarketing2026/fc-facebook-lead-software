@@ -209,3 +209,4 @@ body {
 
 .menu-item { display: block; width: 100%; padding: 6px 12px; border-radius: 6px; text-align: left; }
 .menu-item:hover { background: #f1f5f9; }
+@media (max-width: 767px) { .menu-item { padding: 11px 12px; font-size: 15px; } }
