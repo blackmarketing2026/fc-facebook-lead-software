@@ -5,6 +5,11 @@ import { parseBerlinLocal, TIMEZONE } from "./format";
 export const WAIT_UNIT_LABELS: Record<WaitUnit, string> = { MINUTES: "Minuten", HOURS: "Stunden", DAYS: "Tage" };
 export const MAX_WAIT_DAYS = 365;
 
+/** Bleibt nach Umbenennen der Kette stabil und unterscheidet gleichnamige Ketten. */
+export function completionTagName(name: string, id: string): string {
+  return `Kette Ende: ${Array.from(name).slice(0, 24).join("")} · ${id.slice(0, 36)}`;
+}
+
 /** Absender-Angaben, die klein unter jeder automatischen E-Mail stehen (neben dem Abmelde-Link). */
 export const SENDER_LINES = ["Function Concept", "c/o MDC Management#169", "Welserstraße 3", "87463 Dietmannsried", "E-Mail: support@function-concept.de"];
 

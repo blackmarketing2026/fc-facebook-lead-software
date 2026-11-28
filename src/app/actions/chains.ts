@@ -1,6 +1,7 @@
 "use server";
 
 import { WaitUnit } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -12,6 +13,7 @@ import { db } from "@/lib/db";
 import { mailerConfigured, sendMail } from "@/lib/mailer";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
+import { completionTagName } from "@/lib/chain-logic";
 
 export type ChainState = { error?: string; ok?: string; id?: string; activation?: { started: number; resumed: number } } | undefined;
 
@@ -35,7 +37,8 @@ export async function createChain(_prev: ChainState, formData: FormData): Promis
   const parsed = chainSchema.safeParse({ name: formData.get("name"), tag: formData.get("tag") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Ungültige Eingabe" };
   const tag = await ensureTag(admin.tenantId, parsed.data.tag);
-  const chain = await db.emailChain.create({ data: { tenantId: admin.tenantId, name: parsed.data.name, triggerTagId: tag.id } });
+  const id = randomUUID();
+  const chain = await db.emailChain.create({ data: { id, tenantId: admin.tenantId, name: parsed.data.name, triggerTagId: tag.id, completionTagName: completionTagName(parsed.data.name, id) } });
   refresh();
   redirect(tenantPath(admin.tenant.slug, `/email-chains/${chain.id}`));
 }
@@ -44,11 +47,39 @@ export async function updateChain(chainId: string, _prev: ChainState, formData: 
   const admin = await requireAdmin();
   const parsed = chainSchema.safeParse({ name: formData.get("name"), tag: formData.get("tag") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Ungültige Eingabe" };
-  if (!(await ownChain(chainId, admin.tenantId))) return { error: "Kette nicht gefunden." };
+  const chain = await ownChain(chainId, admin.tenantId);
+  if (!chain) return { error: "Kette nicht gefunden." };
+  if (parsed.data.tag.toLowerCase() === chain.completionTagName.toLowerCase()) return { error: "Start-Tag und Abschluss-Tag müssen unterschiedlich sein." };
   const tag = await ensureTag(admin.tenantId, parsed.data.tag);
   await db.emailChain.update({ where: { id: chainId }, data: { name: parsed.data.name, triggerTagId: tag.id } });
   refresh(chainId);
   return { ok: "Gespeichert." };
+}
+
+/** Ändert den Abschluss-Tag und übernimmt bestehende Markierungen auf den neuen Tag. */
+export async function updateCompletionTag(chainId: string, _prev: ChainState, formData: FormData): Promise<ChainState> {
+  const admin = await requireAdmin();
+  const raw = String(formData.get("completionTag") ?? "").trim().replace(/\s+/g, " ");
+  if (!raw || raw.length > 80) return { error: "Bitte einen Abschluss-Tag mit höchstens 80 Zeichen eingeben." };
+  const chain = await db.emailChain.findFirst({ where: { id: chainId, tenantId: admin.tenantId }, include: { triggerTag: true } });
+  if (!chain) return { error: "Kette nicht gefunden." };
+  if (raw.toLowerCase() === chain.triggerTag.name.toLowerCase()) return { error: "Start-Tag und Abschluss-Tag müssen unterschiedlich sein." };
+  if (raw === chain.completionTagName) return { ok: "Abschluss-Tag ist bereits eingestellt." };
+
+  await db.$transaction(async (tx) => {
+    const oldTag = await tx.tag.findUnique({ where: { tenantId_name: { tenantId: admin.tenantId, name: chain.completionTagName } }, select: { id: true } });
+    const tag = await tx.tag.upsert({ where: { tenantId_name: { tenantId: admin.tenantId, name: raw } }, update: {}, create: { tenantId: admin.tenantId, name: raw } });
+    if (oldTag && oldTag.id !== tag.id) {
+      const links = await tx.leadTag.findMany({ where: { tagId: oldTag.id, lead: { tenantId: admin.tenantId } }, select: { leadId: true } });
+      for (let i = 0; i < links.length; i += 500) {
+        await tx.leadTag.createMany({ data: links.slice(i, i + 500).map(({ leadId }) => ({ leadId, tagId: tag.id })), skipDuplicates: true });
+      }
+    }
+    await tx.emailChain.update({ where: { id: chainId }, data: { completionTagName: tag.name } });
+  });
+  refresh(chainId);
+  revalidatePath("/[tenant]/contacts", "page");
+  return { ok: `Abschluss-Tag „${raw}“ gespeichert.` };
 }
 
 /** Kette ein- oder ausschalten. Eingeschaltet startet sie für Leads, die den Start-Tag ab jetzt bekommen. */

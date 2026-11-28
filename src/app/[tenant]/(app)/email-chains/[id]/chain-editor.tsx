@@ -2,12 +2,12 @@
 
 import { useActionState, useRef, useState, useTransition } from "react";
 import { RichEmailEditor } from "./rich-email-editor";
-import { addStep, deleteChain, deleteStep, moveStep, reorderSteps, saveAutoTag, sendTestStep, setChainActive, updateChain, updateStep, type ChainState } from "@/app/actions/chains";
+import { addStep, deleteChain, deleteStep, moveStep, reorderSteps, saveAutoTag, sendTestStep, setChainActive, updateChain, updateCompletionTag, updateStep, type ChainState } from "@/app/actions/chains";
 
 type StepData = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS"; waitTime: string };
 /** `key` bleibt stabil, auch wenn aus der vorläufigen ID nach dem Speichern die echte wird. */
 type Step = StepData & { key: string; saving?: boolean };
-type Chain = { id: string; name: string; active: boolean; tag: string };
+type Chain = { id: string; name: string; active: boolean; tag: string; completionTag: string };
 export type StepStatsData = { sent: number; bounced: number; opened: number; clicked: number };
 
 const UNITS: Record<StepData["waitUnit"], string> = { MINUTES: "Minuten", HOURS: "Stunden", DAYS: "Tage" };
@@ -24,6 +24,7 @@ function Status({ state }: { state: ChainState }) {
 export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, stats, tracking, autoTag }: { chain: Chain; steps: StepData[]; knownTags: string[]; testEmail: string; stats: Record<string, StepStatsData>; tracking: boolean; autoTag: string }) {
   const [settings, settingsAction, settingsPending] = useActionState(updateChain.bind(null, chain.id), undefined);
   const [autoTagState, autoTagAction, autoTagPending] = useActionState(saveAutoTag, undefined);
+  const [endTagState, endTagAction, endTagPending] = useActionState(updateCompletionTag.bind(null, chain.id), undefined);
   const [busy, start] = useTransition();
   const [info, setInfo] = useState<ChainState>();
   const [steps, setSteps] = useState<Step[]>(() => initialSteps.map((s) => ({ ...s, key: s.id })));
@@ -171,6 +172,7 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
           Die Kette startet für Leads, die den Start-Tag ab dem Aktivieren bekommen – bereits getaggte Leads werden nicht nachträglich gestartet.
           Jeder Lead durchläuft die Kette nur einmal. In jeder Mail steht ein Abmelde-Link.
         </p>
+        <p className="text-sm text-slate-600">Startbedingung: Start-Tag „{chain.tag}“ wird vergeben und der Abschluss-Tag <strong>{chain.completionTag}</strong> ist nicht vorhanden. Den Abschluss-Tag kannst du unten bei „Ende“ ändern.</p>
       </section>
 
       <dialog ref={activationDialog} aria-labelledby="activation-title" className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl bg-white p-6 shadow-xl backdrop:bg-slate-900/50">
@@ -201,6 +203,15 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
         ))}
         {steps.length === 0 && <p className="mb-2 text-center text-xs text-slate-400">Noch keine Schritte – füge mit „+“ eine E-Mail oder Wartezeit hinzu.</p>}
         <div className="mx-auto flex items-center gap-2 rounded-full bg-slate-800 px-5 py-2 text-sm font-semibold text-white shadow">■ Ende</div>
+        <form action={endTagAction} className="card mt-3 space-y-2 p-4">
+          <label className="block">
+            <span className="label">Tag nach Abschluss der Kette</span>
+            <input name="completionTag" key={chain.completionTag} defaultValue={chain.completionTag} required maxLength={80} list="completion-tags" className="input" />
+          </label>
+          <datalist id="completion-tags">{knownTags.map((tag) => <option key={tag} value={tag} />)}</datalist>
+          <p className="text-xs text-slate-500">Diesen Tag erhält der Kontakt am Ende. Kontakte mit diesem Tag starten diese Kette nicht. Beim Ändern bleiben bestehende Markierungen auch unter dem neuen Tag erhalten.</p>
+          <div className="flex flex-wrap items-center gap-3"><button disabled={endTagPending} className="btn-secondary">{endTagPending ? "Speichern …" : "Abschluss-Tag speichern"}</button><Status state={endTagState} /></div>
+        </form>
       </section>
       </div>
     </div>

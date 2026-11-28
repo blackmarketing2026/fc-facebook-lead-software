@@ -48,9 +48,11 @@ export async function addTagToLead(leadId: string, tag: { id: string; name: stri
   const created = await db.leadTag.createMany({ data: [{ leadId, tagId }], skipDuplicates: true });
   if (created.count === 0) return { added: false, started: 0 };
   await db.activity.create({ data: { leadId, userId: userId ?? null, type: "TAG_ADDED", meta: { tag: tag.name } } });
-  const chains = await db.emailChain.findMany({ where: { triggerTagId: tagId, active: true }, select: { id: true } });
+  const chains = await db.emailChain.findMany({ where: { triggerTagId: tagId, active: true }, select: { id: true, tenantId: true, completionTagName: true } });
   let started = 0;
   for (const chain of chains) {
+    const completed = await db.leadTag.findFirst({ where: { leadId, tag: { tenantId: chain.tenantId, name: chain.completionTagName } }, select: { leadId: true } });
+    if (completed) continue;
     try {
       await db.chainRun.create({ data: { chainId: chain.id, leadId, nextRunAt: new Date() } });
       started++;
@@ -140,7 +142,7 @@ export async function processChains(now = new Date()): Promise<ProcessSummary> {
     const run = await db.chainRun.findUniqueOrThrow({
       where: { id: candidate.id },
       include: {
-        chain: { select: { id: true, name: true, tenant: { select: { slug: true } }, steps: { orderBy: { position: "asc" } } } },
+        chain: { select: { id: true, name: true, tenantId: true, completionTagName: true, tenant: { select: { slug: true } }, steps: { orderBy: { position: "asc" } } } },
         lead: { select: { id: true, fullName: true, email: true, emailOptOut: true } },
       },
     });
@@ -159,7 +161,14 @@ export async function processChains(now = new Date()): Promise<ProcessSummary> {
     while (guard++ < MAX_STEPS_PER_RUN) {
       const step = run.chain.steps.find((s) => s.position === position) ?? run.chain.steps[position];
       if (!step) {
-        await finish("DONE");
+        await db.$transaction(async (tx) => {
+          const finished = await tx.chainRun.updateMany({ where: { id: run.id, status: "ACTIVE" }, data: { status: "DONE", nextRunAt: null, finishedAt: new Date() } });
+          if (!finished.count) return;
+          const chain = await tx.emailChain.findUniqueOrThrow({ where: { id: run.chain.id }, select: { tenantId: true, completionTagName: true } });
+          const tag = await tx.tag.upsert({ where: { tenantId_name: { tenantId: chain.tenantId, name: chain.completionTagName } }, update: {}, create: { tenantId: chain.tenantId, name: chain.completionTagName } });
+          const added = await tx.leadTag.createMany({ data: [{ leadId: run.lead.id, tagId: tag.id }], skipDuplicates: true });
+          if (added.count) await tx.activity.create({ data: { leadId: run.lead.id, type: "TAG_ADDED", meta: { tag: tag.name } } });
+        });
         summary.finished++;
         settled = true;
         break;

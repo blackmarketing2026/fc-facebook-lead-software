@@ -329,6 +329,7 @@ model EmailChain {
   tenantId     String
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name         String   @db.VarChar(120)
+  completionTagName String @db.VarChar(80)
   triggerTagId String
   triggerTag   Tag      @relation(fields: [triggerTagId], references: [id], onDelete: Restrict)
   active       Boolean  @default(false)

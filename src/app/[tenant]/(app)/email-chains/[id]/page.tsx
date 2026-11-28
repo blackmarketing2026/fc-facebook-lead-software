@@ -41,7 +41,7 @@ export default async function ChainPage(props: PageProps<"/[tenant]/email-chains
       <Link href={base} className="text-sm text-slate-500 hover:text-slate-800">← Alle Ketten</Link>
 
       <ChainEditor
-        chain={{ id: chain.id, name: chain.name, active: chain.active, tag: chain.triggerTag.name }}
+        chain={{ id: chain.id, name: chain.name, active: chain.active, tag: chain.triggerTag.name, completionTag: chain.completionTagName }}
         steps={chain.steps.map((s) => ({ id: s.id, type: s.type, subject: s.subject ?? "", body: s.body ?? "", waitValue: s.waitValue ?? 1, waitUnit: s.waitUnit ?? "DAYS", waitTime: s.waitTime ?? "" }))}
         knownTags={tags.map((t) => t.name)}
         stats={stats}
