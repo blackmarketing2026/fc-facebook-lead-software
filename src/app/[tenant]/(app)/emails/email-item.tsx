@@ -57,7 +57,7 @@ export function EmailItem({ item, chainHref, testEmail, tracking }: { item: Emai
         <span className={`badge ${item.chainActive ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-600"}`}>{item.chainActive ? "aktiv" : "pausiert"}</span>
         <Link href={chainHref} className="text-sm text-blue-700 hover:underline">In der Kette öffnen →</Link>
       </div>
-      <StatsRow stats={item.stats} tracking={tracking} />
+      <StatsRow stats={item.stats} tracking={tracking} stepId={item.id} />
       {open && (
         <form onSubmit={submit} className="mt-3 space-y-3 border-t border-slate-100 pt-3">
           <label className="block">

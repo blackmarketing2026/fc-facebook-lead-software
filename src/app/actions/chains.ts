@@ -17,6 +17,26 @@ import { completionTagName } from "@/lib/chain-logic";
 
 export type ChainState = { error?: string; ok?: string; id?: string; activation?: { started: number; resumed: number } } | undefined;
 
+export type StatisticKind = "sent" | "bounced" | "opened" | "clicked";
+
+export async function statisticContacts(stepId: string, kind: StatisticKind): Promise<{ id: string; name: string; email: string | null }[]> {
+  const admin = await requireAdmin();
+  if (!["sent", "bounced", "opened", "clicked"].includes(kind)) return [];
+  const step = await db.emailChainStep.findFirst({ where: { id: stepId, type: "EMAIL", chain: { tenantId: admin.tenantId } }, select: { id: true } });
+  if (!step) return [];
+  const rows = await db.chainSend.findMany({
+    where: {
+      stepId: step.id, chain: { tenantId: admin.tenantId }, status: "SENT",
+      ...(kind === "bounced" ? { OR: [{ bouncedAt: { not: null } }, { complainedAt: { not: null } }] } : {}),
+      ...(kind === "opened" ? { openedAt: { not: null } } : {}),
+      ...(kind === "clicked" ? { clickedAt: { not: null } } : {}),
+    },
+    orderBy: { sentAt: "desc" },
+    select: { run: { select: { lead: { select: { id: true, fullName: true, email: true } } } } },
+  });
+  return rows.map(({ run }) => ({ id: run.lead.id, name: run.lead.fullName || "Unbekannt", email: run.lead.email }));
+}
+
 function refresh(chainId?: string) {
   revalidatePath("/[tenant]/email-chains", "page");
   if (chainId) revalidatePath("/[tenant]/email-chains/[id]", "page");

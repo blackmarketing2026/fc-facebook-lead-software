@@ -86,6 +86,33 @@ export async function tagContacts(ids: string[], name: string): Promise<{ messag
   return { message: `Tag „${tag.name}“ wurde ${added} von ${leads.length} Kontakten hinzugefügt. Bereits vorhandene Tags bleiben unverändert.` };
 }
 
+export async function removeContactTags(ids: string[], names: string[]): Promise<{ message: string; error?: boolean }> {
+  const user = await requireUser();
+  const uniqueIds = Array.isArray(ids) ? [...new Set(ids)] : [];
+  const uniqueNames = Array.isArray(names) ? [...new Set(names)] : [];
+  if (!uniqueIds.length || uniqueIds.length > 50 || uniqueIds.some((id) => typeof id !== "string") || !uniqueNames.length || uniqueNames.length > 20 || uniqueNames.some((name) => typeof name !== "string" || !name.trim() || name.length > 80)) {
+    return { error: true, message: "Bitte bis zu 50 Kontakte und bis zu 20 Tags auswählen." };
+  }
+  const leads = await db.lead.findMany({ where: { ...leadScope(user), id: { in: uniqueIds } }, select: { id: true } });
+  if (leads.length !== uniqueIds.length) return { error: true, message: "Mindestens ein Kontakt ist nicht mehr verfügbar." };
+  const tags = await db.tag.findMany({ where: { tenantId: user.tenantId, name: { in: uniqueNames } }, select: { id: true, name: true } });
+  if (tags.length !== uniqueNames.length) return { error: true, message: "Mindestens ein Tag ist nicht mehr verfügbar. Bitte die Seite neu laden." };
+
+  const result = await db.$transaction(async (tx) => {
+    const where = { leadId: { in: uniqueIds }, tagId: { in: tags.map((tag) => tag.id) }, lead: leadScope(user), tag: { tenantId: user.tenantId } };
+    const links = await tx.leadTag.findMany({ where, select: { leadId: true, tagId: true } });
+    const tagNames = new Map(tags.map((tag) => [tag.id, tag.name]));
+    const deleted = await tx.leadTag.deleteMany({ where });
+    if (deleted.count !== links.length) throw new Error("Tag-Zuordnungen wurden gleichzeitig geändert.");
+    if (links.length) await tx.activity.createMany({ data: links.map((link) => ({ leadId: link.leadId, userId: user.id, type: "TAG_REMOVED" as const, meta: { tag: tagNames.get(link.tagId) ?? "" } })) });
+    return { removed: deleted.count, contacts: new Set(links.map((link) => link.leadId)).size };
+  });
+  revalidatePath("/[tenant]/contacts", "page");
+  revalidatePath("/[tenant]/leads", "page");
+  revalidatePath("/[tenant]/leads/[id]", "page");
+  return { message: `${result.removed} ${result.removed === 1 ? "Tag-Zuordnung" : "Tag-Zuordnungen"} bei ${result.contacts} ${result.contacts === 1 ? "Kontakt" : "Kontakten"} entfernt.` };
+}
+
 /** Legt einen Kontakt von Hand an („Kontakte importieren“, Einzelanlage). */
 export async function createContact(_prev: CreateContactState, formData: FormData): Promise<CreateContactState> {
   const admin = await requireAdmin();

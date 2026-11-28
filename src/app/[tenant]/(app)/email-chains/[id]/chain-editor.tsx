@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState, useTransition } from "react";
 import { RichEmailEditor } from "./rich-email-editor";
-import { addStep, deleteChain, deleteStep, moveStep, reorderSteps, saveAutoTag, sendTestStep, setChainActive, updateChain, updateCompletionTag, updateStep, type ChainState } from "@/app/actions/chains";
+import { addStep, deleteChain, deleteStep, moveStep, reorderSteps, saveAutoTag, sendTestStep, setChainActive, statisticContacts, updateChain, updateCompletionTag, updateStep, type ChainState, type StatisticKind } from "@/app/actions/chains";
 
 type StepData = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS"; waitTime: string };
 /** `key` bleibt stabil, auch wenn aus der vorläufigen ID nach dem Speichern die echte wird. */
@@ -362,28 +362,43 @@ function StepCard(props: CardProps) {
 }
 
 const STAT_ITEMS: { key: keyof StepStatsData; icon: string; label: string }[] = [
-  { key: "sent", icon: "✉️", label: "Erhalten (verschickt)" },
+  { key: "sent", icon: "✉️", label: "Versendet" },
   { key: "bounced", icon: "⚠️", label: "Bounce / Spam-Beschwerde" },
   { key: "opened", icon: "👁", label: "Geöffnet" },
   { key: "clicked", icon: "🖱", label: "Auf Link geklickt" },
 ];
 
 /** Statistik einer E-Mail: Icons mit der Zahl schattiert darunter. */
-export function StatsRow({ stats, tracking }: { stats?: StepStatsData; tracking: boolean }) {
+export function StatsRow({ stats, tracking, stepId }: { stats?: StepStatsData; tracking: boolean; stepId: string }) {
+  const [active, setActive] = useState<StatisticKind | null>(null);
+  const [pinned, setPinned] = useState(false);
+  const [contacts, setContacts] = useState<Partial<Record<StatisticKind, { id: string; name: string; email: string | null }[]>>>({});
+  const [errors, setErrors] = useState<Partial<Record<StatisticKind, boolean>>>({});
+  const loading = useRef(new Set<StatisticKind>());
   const s = stats ?? { sent: 0, bounced: 0, opened: 0, clicked: 0 };
   const pct = (n: number) => (s.sent ? `${Math.round((n / s.sent) * 100)} % der verschickten` : "noch nichts verschickt");
+  function show(key: StatisticKind) {
+    setActive(key);
+    if (loading.current.has(key)) return;
+    loading.current.add(key);
+    setErrors((old) => ({ ...old, [key]: false }));
+    statisticContacts(stepId, key).then((list) => setContacts((old) => ({ ...old, [key]: list }))).catch(() => setErrors((old) => ({ ...old, [key]: true }))).finally(() => loading.current.delete(key));
+  }
   return (
-    <div className="mt-3 grid grid-cols-4 gap-2 border-t border-slate-100 pt-3 text-center" aria-label="Statistik">
+    <div className="relative mt-3 grid grid-cols-4 gap-2 border-t border-slate-100 pt-3 text-center" aria-label="Statistik" onMouseLeave={() => { if (!pinned) setActive(null); }} onBlur={(e) => { if (!pinned && !e.currentTarget.contains(e.relatedTarget)) setActive(null); }} onKeyDown={(e) => { if (e.key === "Escape") { setActive(null); setPinned(false); } }}>
       {STAT_ITEMS.map((it) => {
         const off = !tracking && (it.key === "opened" || it.key === "clicked");
         return (
-          <div key={it.key} title={off ? `${it.label}: Messung ausgeschaltet` : `${it.label}: ${s[it.key]} (${it.key === "sent" ? "Anzahl" : pct(s[it.key])})`} className={off ? "opacity-40" : ""}>
-            <div className="text-xl leading-none" aria-hidden="true">{it.icon}</div>
-            <div className="mt-1 text-xs tabular-nums text-slate-400">{off ? "aus" : s[it.key]}</div>
-            <div className="sr-only">{it.label}</div>
-          </div>
+          <button key={it.key} type="button" disabled={off} aria-label={`${it.label}: ${off ? "Messung ausgeschaltet" : `${s[it.key]} (${it.key === "sent" ? "Anzahl" : pct(s[it.key])})`}`} aria-expanded={active === it.key} onMouseEnter={() => { if (!off && !pinned) show(it.key); }} onFocus={() => { if (!off && !pinned) show(it.key); }} onClick={() => { if (active === it.key && pinned) { setPinned(false); setActive(null); } else { setPinned(true); show(it.key); } }} className={`rounded p-1 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${off ? "opacity-40" : ""}`}>
+            <span className="block text-xl leading-none" aria-hidden="true">{it.icon}</span>
+            <span className="mt-1 block text-xs tabular-nums text-slate-400">{off ? "aus" : s[it.key]}</span>
+          </button>
         );
       })}
+      {active && <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-xl">
+        <div className="mb-2 flex items-center justify-between gap-3"><strong className="text-sm">{STAT_ITEMS.find((item) => item.key === active)?.label} · Kontakte</strong><button type="button" aria-label="Kontaktliste schließen" onClick={() => { setActive(null); setPinned(false); }} className="rounded px-2 py-1 text-slate-500 hover:bg-slate-100">✕</button></div>
+        {errors[active] ? <p className="text-sm text-red-700">Kontakte konnten nicht geladen werden.</p> : !contacts[active] ? <p className="text-sm text-slate-500">Kontakte werden geladen …</p> : !contacts[active]?.length ? <p className="text-sm text-slate-500">Noch keine Kontakte.</p> : <ul className="max-h-60 space-y-1 overflow-y-auto text-sm">{contacts[active]?.map((contact, index) => <li key={`${contact.id}-${index}`} className="rounded bg-slate-50 px-2 py-1"><span className="font-medium">{contact.name}</span>{contact.email && <span className="ml-2 break-all text-xs text-slate-500">{contact.email}</span>}</li>)}</ul>}
+      </div>}
     </div>
   );
 }
@@ -402,7 +417,7 @@ function EmailCard({ step, index, total, testEmail, onMove, onRemove, setDragKey
         </button>
         <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} setDragKey={setDragKey} cardRef={cardRef} />
       </div>
-      <StatsRow stats={stats} tracking={tracking} />
+      <StatsRow stats={stats} tracking={tracking} stepId={step.id} />
         <form onSubmit={submit} hidden={!open} className="mt-3 space-y-3">
           <label className="block">
             <span className="label">Betreff</span>
