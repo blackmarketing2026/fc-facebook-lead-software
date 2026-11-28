@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
-import { encodeUrl, renderTemplate, rewriteLinks, SENDER_LINES, textToHtml, trackToken, unsubscribeToken, varsForLead, waitTarget } from "./chain-logic";
+import { encodeUrl, linksToPlainText, renderTemplate, rewriteLinks, SENDER_LINES, textToHtml, trackToken, unsubscribeToken, varsForLead, waitTarget } from "./chain-logic";
 import type { BounceInfo } from "./bounces";
 import { absoluteUrl } from "./lead-notify-mail";
 import { sendMail } from "./mailer";
 import { tenantPath } from "./tenant-paths";
+import { RICH_EMAIL_PREFIX } from "./email-format";
+import { hasEmailBody, renderRichEmail } from "./rich-email";
 
 /** Setting-Schlüssel: Tag, den jeder neue Lead automatisch bekommt (leer = keiner). */
 export const AUTO_TAG_KEY = "lead.autoTag";
@@ -86,16 +88,20 @@ export function buildChainMail(
 ) {
   const vars = varsForLead(lead);
   const subject = renderTemplate(step.subject ?? "", vars).trim();
-  const body = renderTemplate(step.body ?? "", vars);
+  const source = step.body ?? "";
+  const rich = source.startsWith(RICH_EMAIL_PREFIX);
+  const body = rich ? source.slice(RICH_EMAIL_PREFIX.length) : renderTemplate(source, vars);
   const link = unsubscribeUrl(slug, lead.id);
   const { sendId, tracking } = opts;
-  let bodyHtml = textToHtml(body);
+  const rendered = rich ? renderRichEmail(body, vars) : { html: textToHtml(body), text: linksToPlainText(body) };
+  let bodyHtml = rendered.html;
+  const plainBody = rendered.text;
   let pixel = "";
   if (sendId && tracking) {
     bodyHtml = rewriteLinks(bodyHtml, (url) => absoluteUrl(tenantPath(slug, `/api/t/click?s=${sendId}&u=${encodeUrl(url)}&t=${trackToken("click", sendId, url)}`)));
     pixel = `<img src="${absoluteUrl(tenantPath(slug, `/api/t/open?s=${sendId}&t=${trackToken("open", sendId)}`))}" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px">`;
   }
-  const text = `${body}\n\n--\n${SENDER_LINES.join("\n")}\n\nKeine E-Mails mehr erhalten? Hier abmelden: ${link}`;
+  const text = `${plainBody}\n\n--\n${SENDER_LINES.join("\n")}\n\nKeine E-Mails mehr erhalten? Hier abmelden: ${link}`;
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1e293b;max-width:600px">${bodyHtml}<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0 12px"><p style="font-size:11px;line-height:1.5;color:#94a3b8;margin:0 0 8px">${SENDER_LINES.join("<br>").replace("support@function-concept.de", `<a href="mailto:support@function-concept.de" style="color:#94a3b8">support@function-concept.de</a>`)}</p><p style="font-size:11px;color:#94a3b8;margin:0">Keine E-Mails mehr erhalten? <a href="${link}" style="color:#94a3b8">Hier abmelden</a></p>${pixel}</div>`;
   return {
     subject,
@@ -179,7 +185,7 @@ export async function processChains(now = new Date()): Promise<ProcessSummary> {
         break;
       }
       const mail = buildChainMail(step, run.lead, run.chain.tenant.slug, { sendId, tracking });
-      if (!mail.subject || !(step.body ?? "").trim()) {
+      if (!mail.subject || !hasEmailBody(step.body)) {
         await log("SKIPPED", mail.subject, "Betreff oder Text des Schritts ist leer.");
         continue;
       }

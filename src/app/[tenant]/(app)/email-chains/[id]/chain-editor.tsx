@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState, useTransition } from "react";
+import { RichEmailEditor } from "./rich-email-editor";
 import { addStep, deleteChain, deleteStep, moveStep, reorderSteps, sendTestStep, setChainActive, updateChain, updateStep, type ChainState } from "@/app/actions/chains";
 
 type StepData = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS"; waitTime: string };
@@ -353,10 +354,10 @@ function EmailCard({ step, index, total, testEmail, onMove, onRemove, setDragKey
             <span className="label">Betreff</span>
             <input name="subject" defaultValue={step.subject} maxLength={300} className="input" placeholder="Willkommen, {{vorname}}!" />
           </label>
-          <label className="block">
+          <div>
             <span className="label">Text</span>
-            <textarea name="body" defaultValue={step.body} rows={9} className="input font-mono text-sm" placeholder={"Hallo {{vorname}},\n\nvielen Dank für deine Anfrage …"} />
-          </label>
+            <RichEmailEditor body={step.body} />
+          </div>
           <p className="text-xs text-slate-500">Platzhalter: <code>{"{{vorname}}"}</code>, <code>{"{{name}}"}</code>, <code>{"{{email}}"}</code>. Der Abmelde-Link wird automatisch angehängt.</p>
           <div className="flex flex-wrap items-center gap-3">
             <button disabled={disabled} className="btn-primary">{pending ? "Speichern …" : "Speichern"}</button>

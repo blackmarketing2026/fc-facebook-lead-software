@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getAccessibleLeadOr404 } from "@/lib/access";
 import { validWait } from "@/lib/chain-logic";
 import { AUTO_TAG_KEY, TRACKING_KEY, addTagToLead, buildChainMail, cleanTagName, ensureTag } from "@/lib/chains";
+import { hasEmailBody } from "@/lib/rich-email";
 import { db } from "@/lib/db";
 import { mailerConfigured, sendMail } from "@/lib/mailer";
 import { requireAdmin, requireUser } from "@/lib/session";
@@ -58,7 +59,7 @@ export async function setChainActive(chainId: string, active: boolean): Promise<
   if (active) {
     const emails = chain.steps.filter((s) => s.type === "EMAIL");
     if (emails.length === 0) return { error: "Bitte zuerst mindestens eine E-Mail hinzufügen." };
-    if (emails.some((s) => !s.subject?.trim() || !s.body?.trim())) return { error: "Eine E-Mail hat noch keinen Betreff oder Text." };
+    if (emails.some((s) => !s.subject?.trim() || !hasEmailBody(s.body))) return { error: "Eine E-Mail hat noch keinen Betreff oder Text." };
   }
   await db.emailChain.update({ where: { id: chainId }, data: { active } });
   refresh(chainId);
@@ -161,7 +162,7 @@ export async function sendTestStep(stepId: string, to: string): Promise<ChainSta
   const step = await db.emailChainStep.findFirst({ where: { id: stepId, chain: { tenantId: admin.tenantId }, type: "EMAIL" } });
   if (!step) return { error: "Schritt nicht gefunden." };
   if (!z.email().safeParse(to.trim()).success) return { error: "Ungültige Empfängeradresse." };
-  if (!step.subject?.trim() || !step.body?.trim()) return { error: "Bitte zuerst Betreff und Text speichern." };
+  if (!step.subject?.trim() || !hasEmailBody(step.body)) return { error: "Bitte zuerst Betreff und Text speichern." };
   if (!(await mailerConfigured())) return { error: "SMTP ist nicht eingerichtet (Bereich SMTP)." };
   const mail = buildChainMail(step, { id: "test", fullName: "Max Mustermann", email: to.trim() }, admin.tenant.slug);
   try {

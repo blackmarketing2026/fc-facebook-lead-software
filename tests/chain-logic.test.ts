@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { describeWait, renderTemplate, textToHtml, unsubscribeToken, validWait, varsForLead, verifyUnsubscribe, waitMs } from "@/lib/chain-logic";
+import { describeWait, linksToPlainText, renderTemplate, rewriteLinks, textToHtml, unsubscribeToken, validWait, varsForLead, verifyUnsubscribe, waitMs } from "@/lib/chain-logic";
+import { hasEmailBody, renderRichEmail } from "@/lib/rich-email";
 
 describe("E-Mail-Kette: Logik", () => {
   beforeEach(() => {
@@ -32,6 +33,28 @@ describe("E-Mail-Kette: Logik", () => {
     expect(html).toContain("<br>Zeile 2");
     expect(html).toContain('<a href="https://example.com/a?b=1">');
     expect(html.match(/<p /g)).toHaveLength(2);
+  });
+
+  it("rendert verlinkten Text sicher und erhält das Ziel für Textversion und Tracking", () => {
+    const body = "Besuche [<unser Angebot>](https://example.com/?a=1&b=2) und https://example.org";
+    const html = textToHtml(body);
+    expect(html).toContain('<a href="https://example.com/?a=1&amp;b=2">&lt;unser Angebot&gt;</a>');
+    expect(html).toContain('<a href="https://example.org">https://example.org</a>');
+    expect(linksToPlainText(body)).toContain("<unser Angebot> (https://example.com/?a=1&b=2)");
+    expect(rewriteLinks(html, (url) => `https://tracking.example/?url=${encodeURIComponent(url)}`)).toContain(encodeURIComponent("https://example.com/?a=1&b=2"));
+    expect(textToHtml('[Klick](javascript:alert(1))')).not.toContain('<a href="javascript:');
+  });
+
+  it("übernimmt Formatierung und Links sicher in HTML- und Textversion", () => {
+    const result = renderRichEmail('<p><strong>Hallo {{vorname}}</strong> <span style="font-size: 24px">Groß</span> <a href="https://example.com">Angebot</a><script>alert(1)</script><a href="javascript:alert(1)">X</a></p>', { vorname: "<img src=x>", name: "", email: "" });
+    expect(result.html).toContain('<strong>Hallo &lt;img src=x&gt;</strong>');
+    expect(result.html).toContain('font-size:24px');
+    expect(result.html).toContain('<a href="https://example.com">Angebot</a>');
+    expect(result.html).not.toContain("javascript:");
+    expect(result.html).not.toContain("<script");
+    expect(result.text).toContain("https://example.com");
+    expect(hasEmailBody("<!-- rich-email --><p></p>")).toBe(false);
+    expect(hasEmailBody("<!-- rich-email --><p>Hallo</p>")).toBe(true);
   });
 
   it("erzeugt und prüft Abmelde-Token pro Lead", () => {

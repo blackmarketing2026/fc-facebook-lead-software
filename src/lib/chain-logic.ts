@@ -73,19 +73,7 @@ export function varsForLead(lead: { fullName: string | null; email: string | nul
   return { vorname: firstName(lead.fullName), name: (lead.fullName ?? "").trim(), email: lead.email ?? "" };
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}
-
-/** Reintext → einfaches HTML: Absätze, Zeilenumbrüche und anklickbare Links. */
-export function textToHtml(text: string): string {
-  const linkify = (escaped: string) => escaped.replace(/(https?:\/\/[^\s<]+)/g, (url) => `<a href="${url}">${url}</a>`);
-  return text
-    .replace(/\r\n/g, "\n")
-    .split(/\n{2,}/)
-    .map((para) => `<p style="margin:0 0 14px">${linkify(escapeHtml(para)).replace(/\n/g, "<br>")}</p>`)
-    .join("");
-}
+export { textToHtml, linksToPlainText } from "./email-format";
 
 function secret(): string {
   const secret = process.env.SESSION_SECRET;
