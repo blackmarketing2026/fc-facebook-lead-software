@@ -376,9 +376,9 @@ function EmailCard({ step, index, total, testEmail, onMove, onRemove, setDragKey
 }
 
 const UNTIL_OPTIONS: { days: number; label: string }[] = [
-  { days: 0, label: "heute (ist die Uhrzeit vorbei: morgen)" },
-  { days: 1, label: "morgen" },
-  { days: 2, label: "übermorgen" },
+  { days: 0, label: "am selben Tag (sonst am nächsten Tag)" },
+  { days: 1, label: "am nächsten Tag" },
+  { days: 2, label: "nach 2 Tagen" },
   { days: 3, label: "in 3 Tagen" },
   { days: 5, label: "in 5 Tagen" },
   { days: 7, label: "in 7 Tagen" },
@@ -437,10 +437,10 @@ function WaitCard({ step, index, total, onMove, onRemove, setDragKey, cardRef, s
             <input type="hidden" name="useTime" value="on" />
             <p className="text-xs text-amber-800">
               {days === 0
-                ? "Danach geht es weiter: heute zur gewählten Uhrzeit, ist sie schon vorbei, morgen."
+                ? "Beim Erreichen dieses Schritts geht es am selben Tag zur gewählten Uhrzeit weiter. Ist diese bereits erreicht oder vorbei, geht es am nächsten Tag weiter."
                 : days === 1
-                  ? "Danach geht es weiter: am nächsten Kalendertag zur gewählten Uhrzeit – auch wenn die vorherige Mail um 8:01 Uhr rausging, kommt die nächste schon morgen um 8:00 Uhr."
-                  : `Danach geht es weiter: in ${days} Kalendertagen zur gewählten Uhrzeit (deutsche Zeit).`}
+                  ? "Ab dem Erreichen dieses Schritts geht es am nächsten Kalendertag zur gewählten Uhrzeit weiter (deutsche Zeit)."
+                  : `Ab dem Erreichen dieses Schritts geht es nach ${days} Kalendertagen zur gewählten Uhrzeit weiter (deutsche Zeit).`}
             </p>
           </div>
         )}

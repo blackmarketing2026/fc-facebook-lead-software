@@ -4,8 +4,9 @@ import { leadScope } from "@/lib/access";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
-import { ContactRow, ROW_GRID, type ContactSummary } from "./contact-row";
+import { ROW_GRID, type ContactSummary } from "./contact-row";
 import { AddContactDialog } from "./add-contact-dialog";
+import { ContactSelection } from "./contact-selection";
 
 export const metadata = { title: "Kontaktcloud" };
 
@@ -144,8 +145,9 @@ export default async function ContactsPage(props: PageProps<"/[tenant]/contacts"
         ))}
       </div>
 
-      <div className="card overflow-hidden">
+      <ContactSelection rows={shown} leadBase={leadBase} knownTags={allTags.map((t) => t.name)} header={
         <div className={`hidden border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-500 ${ROW_GRID}`}>
+          <div />
           <div>{sortLink("datum", "Datum")}</div>
           <div>{sortLink("name", "Name")}</div>
           <div>Kontakt</div>
@@ -153,12 +155,9 @@ export default async function ContactsPage(props: PageProps<"/[tenant]/contacts"
           <div>Phase</div>
           <div>E-Mail</div>
           <div />
+          <div />
         </div>
-        {shown.length === 0 && <div className="p-8 text-center text-sm text-slate-500">Keine Kontakte gefunden.</div>}
-        {shown.map((c) => (
-          <ContactRow key={c.id} c={c} leadHref={`${leadBase}/${c.id}`} />
-        ))}
-      </div>
+      } />
 
       {pages > 1 && (
         <div className="flex items-center justify-center gap-2 text-sm">

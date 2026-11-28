@@ -40,6 +40,8 @@ export async function deleteLead(leadId: string): Promise<PipelineResult> {
   await getAccessibleLeadOr404(user, leadId);
   await db.lead.delete({ where: { id: leadId } });
   refresh();
+  revalidatePath("/[tenant]/contacts", "page");
+  revalidatePath("/[tenant]/calendar", "page");
   return { ok: true };
 }
 

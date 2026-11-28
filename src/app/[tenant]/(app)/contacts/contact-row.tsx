@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { contactDetails, type ContactDetails } from "@/app/actions/contacts";
+import { deleteLead } from "@/app/actions/pipeline";
 
 export type ContactSummary = {
   id: string;
@@ -20,13 +21,29 @@ export type ContactSummary = {
 const fmt = (iso: string) => new Date(iso).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" });
 const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
 
-export const ROW_GRID = "md:grid md:grid-cols-[100px_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_32px] md:items-center md:gap-3";
+export const ROW_GRID = "md:grid md:grid-cols-[24px_100px_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_32px_32px] md:items-center md:gap-3";
 
-export function ContactRow({ c, leadHref }: { c: ContactSummary; leadHref: string }) {
+export function ContactRow({ c, leadHref, selected, onSelect }: { c: ContactSummary; leadHref: string; selected: boolean; onSelect: (selected: boolean) => void }) {
   const [open, setOpen] = useState(false);
   const [details, setDetails] = useState<ContactDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [deleting, startDelete] = useTransition();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  function remove() {
+    const name = c.name || c.email || c.phone || "Unbekannt";
+    if (!confirm(`„${name}“ endgültig löschen? Notizen, Termine und Verlauf werden ebenfalls gelöscht; E-Mail-Ketten für diesen Kontakt werden beendet.`)) return;
+    setDeleteError(null);
+    startDelete(async () => {
+      try {
+        const result = await deleteLead(c.id);
+        if (result.error) setDeleteError(result.error);
+      } catch {
+        setDeleteError("Der Kontakt konnte nicht gelöscht werden. Bitte versuche es erneut.");
+      }
+    });
+  }
 
   function toggle() {
     const next = !open;
@@ -45,6 +62,7 @@ export function ContactRow({ c, leadHref }: { c: ContactSummary; leadHref: strin
   return (
     <article className="border-b border-slate-100 last:border-0">
       <div className={`cursor-pointer space-y-1 px-4 py-3 hover:bg-slate-50 ${ROW_GRID}`} onClick={toggle} role="button" aria-expanded={open} tabIndex={0} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggle())}>
+        <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} aria-label={`${c.name || c.email || c.phone || "Kontakt"} auswählen`} className="h-4 w-4" />
         <div className="text-sm tabular-nums text-slate-600">{fmtDay(c.receivedAt)}</div>
         <div className="min-w-0">
           <Link href={leadHref} onClick={(e) => e.stopPropagation()} className="block truncate font-semibold text-blue-700 hover:underline">
@@ -69,7 +87,11 @@ export function ContactRow({ c, leadHref }: { c: ContactSummary; leadHref: strin
           )}
         </div>
         <div className="hidden text-slate-400 md:block" aria-hidden="true">{open ? "▾" : "▸"}</div>
+        <button type="button" disabled={deleting} onClick={(e) => { e.stopPropagation(); remove(); }} onKeyDown={(e) => e.stopPropagation()} aria-label={`${c.name || c.email || c.phone || "Kontakt"} löschen`} title="Kontakt löschen" className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50">
+          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3" /></svg>
+        </button>
       </div>
+      {deleteError && <p role="alert" className="px-4 pb-3 text-sm text-red-700">{deleteError}</p>}
 
       {open && (
         <div className="grid gap-4 bg-slate-50 px-4 py-4 lg:grid-cols-3">

@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getAccessibleLeadOr404 } from "@/lib/access";
+import { getAccessibleLeadOr404, leadScope } from "@/lib/access";
 import { activityText } from "@/lib/activity-text";
 import { db } from "@/lib/db";
-import { ensureTag, addTagToLead } from "@/lib/chains";
+import { ensureTag, addTagToLead, cleanTagName } from "@/lib/chains";
 import { parseContactForm } from "@/lib/contact-input";
 import { requireAdmin, requireUser } from "@/lib/session";
 
@@ -59,6 +59,32 @@ export async function contactDetails(leadId: string): Promise<ContactDetails> {
 }
 
 export type CreateContactState = { error?: string; ok?: string; id?: string; existingId?: string } | undefined;
+
+export async function tagContacts(ids: string[], name: string): Promise<{ message: string; error?: boolean }> {
+  const user = await requireUser();
+  const uniqueIds = Array.isArray(ids) ? [...new Set(ids)] : [];
+  const clean = typeof name === "string" ? cleanTagName(name) : "";
+  if (!clean || uniqueIds.length === 0 || uniqueIds.length > 50 || uniqueIds.some((id) => typeof id !== "string")) {
+    return { error: true, message: "Bitte Kontakte und einen Tag auswählen." };
+  }
+  const leads = await db.lead.findMany({ where: { ...leadScope(user), id: { in: uniqueIds } }, select: { id: true } });
+  if (leads.length !== uniqueIds.length) return { error: true, message: "Mindestens ein Kontakt ist nicht mehr verfügbar." };
+
+  const tag = await ensureTag(user.tenantId, clean);
+  let added = 0;
+  try {
+    for (const lead of leads) {
+      if ((await addTagToLead(lead.id, tag, user.id)).added) added++;
+    }
+  } catch {
+    revalidatePath("/[tenant]/contacts", "page");
+    revalidatePath("/[tenant]/leads", "page");
+    return { error: true, message: `Die Vergabe wurde unterbrochen. Der Tag wurde ${added} Kontakten hinzugefügt; bitte prüfe das Ergebnis.` };
+  }
+  revalidatePath("/[tenant]/contacts", "page");
+  revalidatePath("/[tenant]/leads", "page");
+  return { message: `Tag „${tag.name}“ wurde ${added} von ${leads.length} Kontakten hinzugefügt. Bereits vorhandene Tags bleiben unverändert.` };
+}
 
 /** Legt einen Kontakt von Hand an („Kontakte importieren“, Einzelanlage). */
 export async function createContact(_prev: CreateContactState, formData: FormData): Promise<CreateContactState> {
