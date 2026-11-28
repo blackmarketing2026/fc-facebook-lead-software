@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
 import { ContactRow, ROW_GRID, type ContactSummary } from "./contact-row";
+import { AddContactDialog } from "./add-contact-dialog";
 
 export const metadata = { title: "Kontaktcloud" };
 
@@ -33,7 +34,7 @@ export default async function ContactsPage(props: PageProps<"/[tenant]/contacts"
   if (mail === "abgemeldet") where.emailOptOut = true;
   if (mail === "aktiv") where.emailOptOut = false;
 
-  const [leads, allTags] = await Promise.all([
+  const [leads, allTags, stages] = await Promise.all([
     db.lead.findMany({
       where,
       select: {
@@ -44,6 +45,9 @@ export default async function ContactsPage(props: PageProps<"/[tenant]/contacts"
       },
     }),
     db.tag.findMany({ where: { tenantId: user.tenantId }, orderBy: { name: "asc" }, select: { name: true } }),
+    user.role === "ADMIN"
+      ? db.pipelineStage.findMany({ where: { tenantId: user.tenantId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDefault: true } })
+      : Promise.resolve([]),
   ]);
 
   const rows = leads.map((l) => ({
@@ -103,7 +107,10 @@ export default async function ContactsPage(props: PageProps<"/[tenant]/contacts"
           <h1 className="text-2xl font-semibold">Kontaktcloud</h1>
           <p className="text-sm text-slate-500">Alle Kontakte an einem Ort. Klick auf eine Zeile zeigt Protokoll, Notizen und die Facebook-Formulardaten.</p>
         </div>
-        <span className="text-sm text-slate-500">{total} Kontakte</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-500">{total} Kontakte</span>
+          {user.role === "ADMIN" && <AddContactDialog stages={stages} knownTags={allTags.map((t) => t.name)} leadsBase={leadBase} />}
+        </div>
       </div>
 
       <form className="card grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
