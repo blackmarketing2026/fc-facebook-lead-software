@@ -31,6 +31,7 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
   const tempCounter = useRef(0);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [chainOpen, setChainOpen] = useState(true);
+  const [endOpen, setEndOpen] = useState(false);
   const activationDialog = useRef<HTMLDialogElement>(null);
   const [activation, setActivation] = useState<{ started: number; resumed: number } | null>(null);
 
@@ -202,8 +203,10 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
           </div>
         ))}
         {steps.length === 0 && <p className="mb-2 text-center text-xs text-slate-400">Noch keine Schritte – füge mit „+“ eine E-Mail oder Wartezeit hinzu.</p>}
-        <div className="mx-auto flex items-center gap-2 rounded-full bg-slate-800 px-5 py-2 text-sm font-semibold text-white shadow">■ Ende</div>
-        <form action={endTagAction} className="card mt-3 space-y-2 p-4">
+        <button type="button" aria-expanded={endOpen} aria-controls="chain-end-settings" onClick={() => setEndOpen((open) => !open)} className="mx-auto flex items-center gap-2 rounded-full bg-slate-800 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-slate-700">
+          ■ Ende · Abschluss-Tag einstellen {endOpen ? "▴" : "▾"}
+        </button>
+        <form id="chain-end-settings" action={endTagAction} hidden={!endOpen} className="card mt-3 space-y-2 p-4">
           <label className="block">
             <span className="label">Tag nach Abschluss der Kette</span>
             <input name="completionTag" key={chain.completionTag} defaultValue={chain.completionTag} required maxLength={80} list="completion-tags" className="input" />
