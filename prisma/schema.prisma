@@ -76,6 +76,18 @@ model Tenant {
   tags          Tag[]
   chains        EmailChain[]
   inboundEmails InboundEmail[]
+  emailImages   EmailImage[]
+}
+
+model EmailImage {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mimeType  String   @db.VarChar(32)
+  data      Bytes    @db.LongBlob
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
 }
 
 model User {

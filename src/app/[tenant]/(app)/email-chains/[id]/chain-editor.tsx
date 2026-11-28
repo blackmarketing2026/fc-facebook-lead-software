@@ -28,6 +28,7 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
   const [steps, setSteps] = useState<Step[]>(() => initialSteps.map((s) => ({ ...s, key: s.id })));
   const tempCounter = useRef(0);
   const [dragKey, setDragKey] = useState<string | null>(null);
+  const [chainOpen, setChainOpen] = useState(true);
 
   const run = (fn: () => Promise<ChainState | void>) =>
     start(async () => {
@@ -147,7 +148,13 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
         </p>
       </section>
 
-      {/* Grafische Schrittkette */}
+      <div className="mx-auto w-full max-w-xl">
+        <button type="button" className="btn-secondary w-full" aria-expanded={chainOpen} aria-controls="chain-steps" onClick={() => setChainOpen((open) => !open)}>
+          {chainOpen ? "E-Mail-Kette zuklappen ▴" : "E-Mail-Kette aufklappen ▾"}
+        </button>
+      </div>
+      {/* Ausblenden statt entfernen: Ungespeicherte Eingaben bleiben erhalten. */}
+      <div id="chain-steps" hidden={!chainOpen}>
       <section className="mx-auto flex w-full max-w-xl flex-col items-stretch">
         <div className="mx-auto flex items-center gap-2 rounded-full bg-green-600 px-5 py-2 text-sm font-semibold text-white shadow">
           ▶ Start · Tag „{chain.tag}“ wird vergeben
@@ -162,6 +169,7 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
         {steps.length === 0 && <p className="mb-2 text-center text-xs text-slate-400">Noch keine Schritte – füge mit „+“ eine E-Mail oder Wartezeit hinzu.</p>}
         <div className="mx-auto flex items-center gap-2 rounded-full bg-slate-800 px-5 py-2 text-sm font-semibold text-white shadow">■ Ende</div>
       </section>
+      </div>
     </div>
   );
 }
@@ -348,8 +356,7 @@ function EmailCard({ step, index, total, testEmail, onMove, onRemove, setDragKey
         <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} setDragKey={setDragKey} cardRef={cardRef} />
       </div>
       <StatsRow stats={stats} tracking={tracking} />
-      {open && (
-        <form onSubmit={submit} className="mt-3 space-y-3">
+        <form onSubmit={submit} hidden={!open} className="mt-3 space-y-3">
           <label className="block">
             <span className="label">Betreff</span>
             <input name="subject" defaultValue={step.subject} maxLength={300} className="input" placeholder="Willkommen, {{vorname}}!" />
@@ -371,7 +378,6 @@ function EmailCard({ step, index, total, testEmail, onMove, onRemove, setDragKey
             <Status state={testState} />
           </div>
         </form>
-      )}
     </div>
   );
 }
@@ -388,6 +394,7 @@ const UNTIL_OPTIONS: { days: number; label: string }[] = [
 ];
 
 function WaitCard({ step, index, total, onMove, onRemove, setDragKey, cardRef, submit, state, disabled, pending }: CardProps & { cardRef: React.RefObject<HTMLDivElement | null>; submit: (e: React.FormEvent<HTMLFormElement>) => void; state: ChainState; disabled: boolean; pending: boolean }) {
+  const [open, setOpen] = useState(true);
   const [mode, setMode] = useState<"duration" | "until">(step.waitTime ? "until" : "duration");
   const [unit, setUnit] = useState<StepData["waitUnit"]>(step.waitUnit);
   const [days, setDays] = useState(step.waitTime ? step.waitValue : 1);
@@ -396,10 +403,10 @@ function WaitCard({ step, index, total, onMove, onRemove, setDragKey, cardRef, s
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-amber-900">⏱ Wartezeit {step.saving && <span className="font-normal text-amber-700">· wird angelegt …</span>}</span>
+        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="flex-1 text-left text-sm font-semibold text-amber-900">⏱ Wartezeit {open ? "▴" : "▾"} {step.saving && <span className="font-normal text-amber-700">· wird angelegt …</span>}</button>
         <StepControls step={step} index={index} total={total} onMove={onMove} onRemove={onRemove} setDragKey={setDragKey} cardRef={cardRef} />
       </div>
-      <form onSubmit={submit} className="mt-2 space-y-3">
+      <form onSubmit={submit} hidden={!open} className="mt-2 space-y-3">
         <div className="flex flex-wrap gap-x-5 gap-y-1">
           <label className={radio}>
             <input type="radio" name="waitMode" checked={mode === "duration"} onChange={() => setMode("duration")} className="h-4 w-4" />

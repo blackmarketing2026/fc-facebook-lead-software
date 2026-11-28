@@ -1,22 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { FontSize, TextStyle } from "@tiptap/extension-text-style";
+import Image from "@tiptap/extension-image";
+import { uploadEmailImage } from "@/app/actions/email-images";
 import { RICH_EMAIL_PREFIX, textToHtml } from "@/lib/email-format";
 
 export function RichEmailEditor({ body }: { body: string }) {
   const initial = body.startsWith(RICH_EMAIL_PREFIX) ? body.slice(RICH_EMAIL_PREFIX.length) : textToHtml(body);
   const [html, setHtml] = useState(initial);
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, defaultProtocol: "https" } }), TextStyle, FontSize],
+    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, defaultProtocol: "https" } }), TextStyle, FontSize, Image],
     content: initial,
     onUpdate: ({ editor }) => setHtml(editor.getHTML()),
-    editorProps: { attributes: { class: "min-h-56 p-3 outline-none [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_a]:text-blue-700 [&_a]:underline", "aria-label": "E-Mail-Text" } },
+    editorProps: { attributes: { class: "min-h-56 p-3 outline-none [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_a]:text-blue-700 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto", "aria-label": "E-Mail-Text" } },
   });
+
+  async function uploadImage(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !editor) return;
+    if (file.size > 3 * 1024 * 1024) { setError("Das Bild darf höchstens 3 MB groß sein."); return; }
+    setUploading(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("image", file);
+      const result = await uploadEmailImage(form);
+      if (result.error || !result.path) { setError(result.error || "Bild konnte nicht hochgeladen werden."); return; }
+      editor.chain().focus().setImage({ src: `${window.location.origin}${result.path}`, alt: file.name }).run();
+    } catch { setError("Bild konnte nicht hochgeladen werden. Bitte versuche es erneut."); }
+    finally { setUploading(false); }
+  }
+
+  function insertImageUrl() {
+    const value = window.prompt("Öffentlich erreichbare Bildadresse eingeben:", "https://");
+    if (value === null) return;
+    try {
+      const url = new URL(value.trim());
+      if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+      editor?.chain().focus().setImage({ src: url.href, alt: "" }).run();
+      setError("");
+    } catch { setError("Bitte eine gültige Bildadresse mit https:// oder http:// eingeben."); }
+  }
 
   function setLink() {
     if (!editor) return;
@@ -46,6 +78,9 @@ export function RichEmailEditor({ body }: { body: string }) {
         <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={setLink} className="rounded px-2 py-1 text-sm hover:bg-slate-200">🔗 Link</button>
         <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => editor?.chain().focus().extendMarkRange("link").unsetLink().run()} className="rounded px-2 py-1 text-sm hover:bg-slate-200">Link entfernen</button>
         <button type="button" title="Aufzählung" aria-label="Aufzählung" onMouseDown={(e) => e.preventDefault()} onClick={() => editor?.chain().focus().toggleBulletList().run()} className="rounded px-2 py-1 text-sm hover:bg-slate-200">• Liste</button>
+        <input ref={fileRef} type="file" accept="image/gif,image/png,image/jpeg,image/webp" className="sr-only" tabIndex={-1} onChange={uploadImage} aria-label="Bilddatei auswählen" />
+        <button type="button" disabled={uploading || !editor} onMouseDown={(e) => e.preventDefault()} onClick={() => fileRef.current?.click()} className="rounded px-2 py-1 text-sm hover:bg-slate-200 disabled:opacity-50">{uploading ? "Bild wird hochgeladen …" : "Bild/GIF hochladen"}</button>
+        <button type="button" disabled={!editor} onMouseDown={(e) => e.preventDefault()} onClick={insertImageUrl} className="rounded px-2 py-1 text-sm hover:bg-slate-200 disabled:opacity-50">Bildadresse</button>
       </div>
       <EditorContent editor={editor} />
     </div>

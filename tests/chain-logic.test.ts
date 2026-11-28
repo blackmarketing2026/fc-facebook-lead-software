@@ -57,6 +57,15 @@ describe("E-Mail-Kette: Logik", () => {
     expect(hasEmailBody("<!-- rich-email --><p>Hallo</p>")).toBe(true);
   });
 
+  it("erhält Bilder und GIFs in E-Mails und entfernt unsichere Bildquellen", () => {
+    const gif = '<img src="https://example.com/animation.gif" alt="Animation">';
+    const result = renderRichEmail(gif, { vorname: "", name: "", email: "" });
+    expect(result.html).toContain('src="https://example.com/animation.gif"');
+    expect(result.html).toContain("max-width:100%");
+    expect(hasEmailBody(`<!-- rich-email -->${gif}`)).toBe(true);
+    expect(renderRichEmail('<img src="javascript:alert(1)">', { vorname: "", name: "", email: "" }).html).not.toContain("javascript:");
+  });
+
   it("erzeugt und prüft Abmelde-Token pro Lead", () => {
     const token = unsubscribeToken("lead-1");
     expect(verifyUnsubscribe("lead-1", token)).toBe(true);
