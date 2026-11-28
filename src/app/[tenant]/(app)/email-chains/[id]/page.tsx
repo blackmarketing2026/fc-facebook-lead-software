@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTrackingEnabled, stepStats } from "@/lib/chains";
+import { getAutoTagName, getTrackingEnabled, stepStats } from "@/lib/chains";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { requireAdmin } from "@/lib/session";
@@ -17,7 +17,7 @@ export default async function ChainPage(props: PageProps<"/[tenant]/email-chains
     include: { triggerTag: { select: { name: true } }, steps: { orderBy: { position: "asc" } } },
   });
   if (!chain) notFound();
-  const [stats, tracking, tags, runs, sends] = await Promise.all([
+  const [stats, tracking, tags, runs, sends, autoTag] = await Promise.all([
     stepStats(id),
     getTrackingEnabled(),
     db.tag.findMany({ where: { tenantId: admin.tenantId }, orderBy: { name: "asc" }, select: { name: true } }),
@@ -28,6 +28,7 @@ export default async function ChainPage(props: PageProps<"/[tenant]/email-chains
       include: { lead: { select: { id: true, fullName: true } } },
     }),
     db.chainSend.findMany({ where: { chainId: id }, orderBy: { sentAt: "desc" }, take: 25 }),
+    getAutoTagName(),
   ]);
   const leadNames = new Map(runs.map((r) => [r.leadId, r.lead.fullName ?? "Unbekannt"]));
   const base = tenantPath(admin.tenant.slug, "/email-chains");
@@ -45,6 +46,7 @@ export default async function ChainPage(props: PageProps<"/[tenant]/email-chains
         knownTags={tags.map((t) => t.name)}
         stats={stats}
         tracking={tracking}
+        autoTag={autoTag}
         testEmail={admin.email}
       />
 

@@ -13,7 +13,7 @@ import { mailerConfigured, sendMail } from "@/lib/mailer";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { tenantPath } from "@/lib/tenant-paths";
 
-export type ChainState = { error?: string; ok?: string; id?: string } | undefined;
+export type ChainState = { error?: string; ok?: string; id?: string; activation?: { started: number; resumed: number } } | undefined;
 
 function refresh(chainId?: string) {
   revalidatePath("/[tenant]/email-chains", "page");
@@ -61,9 +61,15 @@ export async function setChainActive(chainId: string, active: boolean): Promise<
     if (emails.length === 0) return { error: "Bitte zuerst mindestens eine E-Mail hinzufügen." };
     if (emails.some((s) => !s.subject?.trim() || !hasEmailBody(s.body))) return { error: "Eine E-Mail hat noch keinen Betreff oder Text." };
   }
-  await db.emailChain.update({ where: { id: chainId }, data: { active } });
+  const resumed = await db.$transaction(async (tx) => {
+    const count = active && !chain.active
+      ? await tx.chainRun.count({ where: { chainId, status: "ACTIVE", nextRunAt: { not: null }, lead: { emailOptOut: false } } })
+      : 0;
+    await tx.emailChain.update({ where: { id: chainId }, data: { active } });
+    return count;
+  });
   refresh(chainId);
-  return { ok: active ? "Kette ist aktiv." : "Kette ist pausiert." };
+  return { ok: active ? "Kette ist aktiv." : "Kette ist pausiert.", ...(active ? { activation: { started: 0, resumed } } : {}) };
 }
 
 export async function deleteChain(chainId: string): Promise<ChainState> {
@@ -187,6 +193,7 @@ export async function saveAutoTag(_prev: ChainState, formData: FormData): Promis
   const name = cleanTagName(String(formData.get("tag") ?? ""));
   await db.setting.upsert({ where: { key: AUTO_TAG_KEY }, update: { value: name }, create: { key: AUTO_TAG_KEY, value: name } });
   refresh();
+  revalidatePath("/[tenant]/email-chains/[id]", "page");
   return { ok: name ? `Neue Leads bekommen den Tag „${name}“.` : "Neue Leads bekommen keinen Tag mehr." };
 }
 

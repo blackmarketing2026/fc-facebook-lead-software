@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState, useTransition } from "react";
 import { RichEmailEditor } from "./rich-email-editor";
-import { addStep, deleteChain, deleteStep, moveStep, reorderSteps, sendTestStep, setChainActive, updateChain, updateStep, type ChainState } from "@/app/actions/chains";
+import { addStep, deleteChain, deleteStep, moveStep, reorderSteps, saveAutoTag, sendTestStep, setChainActive, updateChain, updateStep, type ChainState } from "@/app/actions/chains";
 
 type StepData = { id: string; type: "EMAIL" | "WAIT"; subject: string; body: string; waitValue: number; waitUnit: "MINUTES" | "HOURS" | "DAYS"; waitTime: string };
 /** `key` bleibt stabil, auch wenn aus der vorläufigen ID nach dem Speichern die echte wird. */
@@ -21,14 +21,28 @@ function Status({ state }: { state: ChainState }) {
   );
 }
 
-export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, stats, tracking }: { chain: Chain; steps: StepData[]; knownTags: string[]; testEmail: string; stats: Record<string, StepStatsData>; tracking: boolean }) {
+export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, stats, tracking, autoTag }: { chain: Chain; steps: StepData[]; knownTags: string[]; testEmail: string; stats: Record<string, StepStatsData>; tracking: boolean; autoTag: string }) {
   const [settings, settingsAction, settingsPending] = useActionState(updateChain.bind(null, chain.id), undefined);
+  const [autoTagState, autoTagAction, autoTagPending] = useActionState(saveAutoTag, undefined);
   const [busy, start] = useTransition();
   const [info, setInfo] = useState<ChainState>();
   const [steps, setSteps] = useState<Step[]>(() => initialSteps.map((s) => ({ ...s, key: s.id })));
   const tempCounter = useRef(0);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [chainOpen, setChainOpen] = useState(true);
+  const activationDialog = useRef<HTMLDialogElement>(null);
+  const [activation, setActivation] = useState<{ started: number; resumed: number } | null>(null);
+
+  function toggleActivation() {
+    start(async () => {
+      const result = await setChainActive(chain.id, !chain.active);
+      setInfo(result);
+      if (result?.activation) {
+        setActivation(result.activation);
+        activationDialog.current?.showModal();
+      }
+    });
+  }
 
   const run = (fn: () => Promise<ChainState | void>) =>
     start(async () => {
@@ -111,7 +125,7 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
           <h1 className="text-xl font-semibold">{chain.name}</h1>
           <span className={`badge ${chain.active ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-600"}`}>{chain.active ? "aktiv" : "pausiert"}</span>
           <div className="ml-auto flex flex-wrap gap-2">
-            <button type="button" disabled={busy} className={chain.active ? "btn-secondary" : "btn-primary"} onClick={() => run(() => setChainActive(chain.id, !chain.active))}>
+            <button type="button" disabled={busy} className={chain.active ? "btn-secondary" : "btn-primary"} onClick={toggleActivation}>
               {chain.active ? "Pausieren" : "Kette aktivieren"}
             </button>
             <button
@@ -142,11 +156,30 @@ export function ChainEditor({ chain, steps: initialSteps, knownTags, testEmail, 
           <button disabled={settingsPending} className="btn-secondary">{settingsPending ? "…" : "Speichern"}</button>
           <div className="sm:col-span-3"><Status state={settings} /></div>
         </form>
+        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+          <h2 className="text-sm font-semibold text-blue-900">Start-Tag automatisch bei Lead-Eingang vergeben</h2>
+          <p className="mt-1 text-sm text-slate-700">Aktueller automatischer Tag: <strong>{autoTag || "Keiner"}</strong>. Er gilt für neu eingehende importierte Leads.</p>
+          <p className="mt-1 text-xs text-slate-600">Es gibt einen gemeinsamen automatischen Tag. Die Auswahl ersetzt den bisherigen Tag und kann auch andere Ketten mit demselben Start-Tag auslösen. Änderungen am Start-Tag oben bitte zuerst speichern.</p>
+          <form action={autoTagAction} className="mt-3 flex flex-wrap items-center gap-3">
+            <input type="hidden" name="tag" value={chain.tag} />
+            <button className="btn-secondary" disabled={autoTagPending || autoTag === chain.tag}>{autoTagPending ? "Speichern …" : autoTag === chain.tag ? "Start-Tag ist automatisch eingestellt" : `„${chain.tag}“ automatisch vergeben`}</button>
+            {autoTagState?.ok && <span role="status" className="text-sm text-green-700">{autoTagState.ok}</span>}
+            {autoTagState?.error && <span role="alert" className="text-sm text-red-700">{autoTagState.error}</span>}
+          </form>
+        </div>
         <p className="text-xs text-slate-500">
           Die Kette startet für Leads, die den Start-Tag ab dem Aktivieren bekommen – bereits getaggte Leads werden nicht nachträglich gestartet.
           Jeder Lead durchläuft die Kette nur einmal. In jeder Mail steht ein Abmelde-Link.
         </p>
       </section>
+
+      <dialog ref={activationDialog} aria-labelledby="activation-title" className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl bg-white p-6 shadow-xl backdrop:bg-slate-900/50">
+        <h2 id="activation-title" className="text-xl font-semibold">E-Mail-Kette aktiviert</h2>
+        <p className="mt-3 text-sm text-slate-700"><strong>{activation?.started ?? 0} Kontakte</strong> starten durch die Aktivierung neu.</p>
+        <p className="mt-2 text-sm text-slate-700"><strong>{activation?.resumed ?? 0} bestehende Abläufe</strong> werden fortgesetzt, sobald ihr nächster Schritt fällig ist.</p>
+        <p className="mt-2 text-sm text-slate-500">Bereits mit dem Start-Tag versehene Kontakte starten nicht nachträglich. Neue Kontakte starten, wenn sie den Tag bei aktiver Kette erhalten.</p>
+        <div className="mt-5 flex justify-end"><button type="button" className="btn-primary" onClick={() => activationDialog.current?.close()}>Verstanden</button></div>
+      </dialog>
 
       <div className="mx-auto w-full max-w-xl">
         <button type="button" className="btn-secondary w-full" aria-expanded={chainOpen} aria-controls="chain-steps" onClick={() => setChainOpen((open) => !open)}>
